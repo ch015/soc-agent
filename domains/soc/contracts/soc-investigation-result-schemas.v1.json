@@ -1,0 +1,824 @@
+{
+  "id": "nunchi.soc.investigation.result-schemas.v1",
+  "schemas": {
+    "nunchi.soc.investigation.evidence-review-result.v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "evidence-review"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigation-evidence-reviewer"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "complete"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "coverageAssessment": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial"
+              ]
+            },
+            "reviewedQueryIds": {
+              "maxItems": 40,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^qry-[a-z0-9][a-z0-9._-]{1,79}$"
+              }
+            },
+            "availableLocators": {
+              "maxItems": 2500,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+              }
+            },
+            "missingDirections": {
+              "maxItems": 2,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "source",
+                  "destination"
+                ]
+              }
+            },
+            "limitations": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "biasRisks": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            },
+            "unresolved": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "summary",
+            "coverageAssessment",
+            "reviewedQueryIds",
+            "availableLocators",
+            "missingDirections",
+            "limitations",
+            "biasRisks",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "evidence-review"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigation-evidence-reviewer"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "blocked"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "unresolved": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "summary",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "nunchi.soc.investigation.analysis-result.v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "analyze"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigator"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "complete"
+            },
+            "claims": {
+              "minItems": 1,
+              "maxItems": 40,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "claimKey": {
+                    "type": "string",
+                    "pattern": "^claim-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": [
+                      "pattern",
+                      "entity",
+                      "timeline",
+                      "control",
+                      "data-quality"
+                    ]
+                  },
+                  "statement": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "epistemicStatus": {
+                    "type": "string",
+                    "enum": [
+                      "observed",
+                      "supported",
+                      "unverified"
+                    ]
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "evidenceAssertions": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "locator": {
+                          "type": "string",
+                          "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                        },
+                        "field": {
+                          "type": "string",
+                          "pattern": "^(?:kind|timestamp|entityRefs|metric|value|facts\\.[A-Za-z0-9_.-]+|dimensions\\.[A-Za-z0-9_.-]+)$"
+                        },
+                        "operator": {
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "contains"
+                          ]
+                        },
+                        "expected": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 320
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "locator",
+                        "field",
+                        "operator",
+                        "expected"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "counterEvidenceLocators": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "alternativeExplanations": {
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "limitations": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  }
+                },
+                "required": [
+                  "claimKey",
+                  "category",
+                  "statement",
+                  "epistemicStatus",
+                  "evidenceLocators",
+                  "evidenceAssertions",
+                  "counterEvidenceLocators",
+                  "alternativeExplanations",
+                  "limitations"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "hypotheses": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "hypothesisKey": {
+                    "type": "string",
+                    "pattern": "^hyp-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "statement": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "disposition": {
+                    "type": "string",
+                    "enum": [
+                      "supported",
+                      "possible",
+                      "rejected"
+                    ]
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "counterEvidenceLocators": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "prerequisites": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  },
+                  "limitations": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1000
+                    }
+                  }
+                },
+                "required": [
+                  "hypothesisKey",
+                  "statement",
+                  "disposition",
+                  "evidenceLocators",
+                  "counterEvidenceLocators",
+                  "prerequisites",
+                  "limitations"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "advisoryActions": {
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "actionKey": {
+                    "type": "string",
+                    "pattern": "^action-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "actionType": {
+                    "type": "string",
+                    "enum": [
+                      "collect-additional-evidence",
+                      "validate-control",
+                      "request-human-review",
+                      "continue-monitoring"
+                    ]
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  },
+                  "rationale": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  }
+                },
+                "required": [
+                  "actionKey",
+                  "actionType",
+                  "subject",
+                  "rationale",
+                  "evidenceLocators"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "unresolved": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "claims",
+            "hypotheses",
+            "advisoryActions",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "analyze"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigator"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "blocked"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "unresolved": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "summary",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "nunchi.soc.investigation.verification-result.v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "verify"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigation-verifier"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "complete"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "claimReviews": {
+              "minItems": 1,
+              "maxItems": 40,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "claimKey": {
+                    "type": "string",
+                    "pattern": "^claim-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "supported",
+                      "unsupported",
+                      "uncertain"
+                    ]
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "claimKey",
+                  "decision",
+                  "evidenceLocators",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "actionReviews": {
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "actionKey": {
+                    "type": "string",
+                    "pattern": "^action-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "proportionate",
+                      "unsupported",
+                      "uncertain"
+                    ]
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "actionKey",
+                  "decision",
+                  "evidenceLocators",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "hypothesisReviews": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "hypothesisKey": {
+                    "type": "string",
+                    "pattern": "^hyp-[a-z0-9][a-z0-9._-]{1,79}$"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "reconciled",
+                      "unsupported",
+                      "uncertain"
+                    ]
+                  },
+                  "evidenceLocators": {
+                    "minItems": 1,
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "counterEvidenceLocators": {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+                    }
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  }
+                },
+                "required": [
+                  "hypothesisKey",
+                  "decision",
+                  "evidenceLocators",
+                  "counterEvidenceLocators",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "queryCoverageChecked": {
+              "type": "boolean"
+            },
+            "anchoringChecked": {
+              "type": "boolean"
+            },
+            "counterEvidenceChecked": {
+              "type": "boolean"
+            },
+            "alternativesChecked": {
+              "type": "boolean"
+            },
+            "gateDecision": {
+              "type": "string",
+              "enum": [
+                "pass",
+                "hold"
+              ]
+            },
+            "unresolved": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "summary",
+            "claimReviews",
+            "actionReviews",
+            "hypothesisReviews",
+            "queryCoverageChecked",
+            "anchoringChecked",
+            "counterEvidenceChecked",
+            "alternativesChecked",
+            "gateDecision",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "contractVersion": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "phase": {
+              "type": "string",
+              "const": "verify"
+            },
+            "role": {
+              "type": "string",
+              "const": "soc-investigation-verifier"
+            },
+            "snapshotId": {
+              "type": "string",
+              "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+            },
+            "snapshotSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "status": {
+              "type": "string",
+              "const": "blocked"
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "unresolved": {
+              "minItems": 1,
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000
+              }
+            }
+          },
+          "required": [
+            "contractVersion",
+            "phase",
+            "role",
+            "snapshotId",
+            "snapshotSha256",
+            "status",
+            "summary",
+            "unresolved"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

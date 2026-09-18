@@ -1,0 +1,11 @@
+.git
+node_modules
+.env
+.env.*
+.nunchi
+.soc
+reports
+coverage
+*.log
+*.pem
+*.key

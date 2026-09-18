@@ -1,0 +1,177 @@
+{
+  "id": "nunchi.soc.report",
+  "version": "1.0.0",
+  "domain": "soc",
+  "mission": "report",
+  "lifecycle": "finite",
+  "forbiddenModelTools": [
+    "Agent",
+    "Bash",
+    "Edit",
+    "Write",
+    "WebFetch",
+    "WebSearch"
+  ],
+  "limits": {
+    "maxIterations": 0,
+    "maxSubagentDepth": 0
+  },
+  "isolation": {
+    "settingSources": [],
+    "strictMcpConfig": true,
+    "disableAutoMemory": true,
+    "inheritParentSecrets": false,
+    "sandboxRequired": true,
+    "networkDefaultDeny": true,
+    "permissionMode": "dontAsk"
+  },
+  "roles": {
+    "soc-report-evidence-reviewer": {
+      "agentFile": "agents/soc-report-evidence-reviewer.md",
+      "description": "후보 판단을 보기 전에 봉인된 SOC 보고 스냅샷의 커버리지와 증거 한계를 기록하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-report-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    },
+    "soc-reporter": {
+      "agentFile": "agents/soc-reporter.md",
+      "description": "봉인된 스냅샷에서 locator 기반 보고 판단을 제안하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-report-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    },
+    "soc-report-verifier": {
+      "agentFile": "agents/soc-report-verifier.md",
+      "description": "evidence-first 검토와 보고 판단을 대조해 근거·확실성·편향 위험을 검증하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-report-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    }
+  },
+  "phases": [
+    {
+      "id": "evidence-review",
+      "role": "soc-report-evidence-reviewer",
+      "requires": [],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.report.evidence-review-result.v1",
+      "requiredMethodFiles": [
+        "methods/report-evidence-review.md"
+      ],
+      "requiredArtifacts": [
+        "02_soc_report_evidence_review.json"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    },
+    {
+      "id": "judge",
+      "role": "soc-reporter",
+      "requires": [
+        "evidence-review"
+      ],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.report.judgment-result.v1",
+      "requiredMethodFiles": [
+        "methods/report-judge.md"
+      ],
+      "requiredArtifacts": [
+        "03_soc_report_judgment.json"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    },
+    {
+      "id": "verify",
+      "role": "soc-report-verifier",
+      "requires": [
+        "judge"
+      ],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.report.verification-result.v1",
+      "requiredMethodFiles": [
+        "methods/report-verify.md"
+      ],
+      "requiredArtifacts": [
+        "04_soc_report_verification.json",
+        "05_soc_report_draft.md"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    }
+  ],
+  "failurePolicy": {
+    "validationFailure": "block"
+  },
+  "resources": [
+    {
+      "path": "contracts/soc-report-source-schema.v1.json",
+      "sha256": "844b388a4f5369ff5c10d103203c7f7fdc473a39efad9eef3593f70c3919ebbc"
+    },
+    {
+      "path": "contracts/soc-report-result-schemas.v1.json",
+      "sha256": "7ab0aa14b51490ed1e6eb3f74db73d458742e621f867184858e390ac8a9c71d6"
+    },
+    {
+      "path": "agents/soc-report-evidence-reviewer.md",
+      "sha256": "622eacea4ec20be9d1c02544188a1dda0aa6da676f5288b5f822948c6acd317c"
+    },
+    {
+      "path": "skills/soc-report-contract/SKILL.md",
+      "sha256": "352dcc9810ec716efa77183383910f1fa8381ad554461b5bb0da19c29b96b01f"
+    },
+    {
+      "path": "agents/soc-reporter.md",
+      "sha256": "5f51d15a80255eac2f56c9022bb4459ba8d6282990720afa016c8f914129d862"
+    },
+    {
+      "path": "agents/soc-report-verifier.md",
+      "sha256": "793f15e09ebc7660d613411223cca119f60e2223fc4ab9746152355661e39261"
+    },
+    {
+      "path": "methods/report-evidence-review.md",
+      "sha256": "0f1b32110da874b2d70aeed947caa46866fc83628caed0cc05ea50cae4e5e5b9"
+    },
+    {
+      "path": "methods/report-judge.md",
+      "sha256": "a534c2d0a48cba35d12e152979d19a67f3978d4ab13fd10b8d511801c585d64c"
+    },
+    {
+      "path": "methods/report-verify.md",
+      "sha256": "cfd11022b140b68424eded62453fb193cf04a592733dac9a06626dcfd4db9844"
+    }
+  ]
+}

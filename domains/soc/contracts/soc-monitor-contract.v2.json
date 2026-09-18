@@ -1,0 +1,132 @@
+{
+  "id": "nunchi.soc.monitor",
+  "version": "2.0.0",
+  "domain": "soc",
+  "mission": "monitor",
+  "lifecycle": "signal-triggered",
+  "description": "24시간 보안 관제: 시그널 수신 → triage → 분석 → 슬랙 알림. gate는 전부 warning-only.",
+  "failurePolicy": {
+    "validationFailure": "warn",
+    "phaseTimeout": "skip",
+    "budgetExhaustion": "warn"
+  },
+  "limits": {
+    "maxIterations": 0,
+    "maxSubagentDepth": 0,
+    "phaseTimeoutMs": 120000,
+    "maxBudgetUsd": 5.0
+  },
+  "gate": {
+    "mode": "warning-only",
+    "note": "모든 gate violation은 로그만 기록하고 차단하지 않는다. blocked 상태를 발생시키지 않는다."
+  },
+  "isolation": {
+    "settingSources": [],
+    "strictMcpConfig": true,
+    "disableAutoMemory": true,
+    "inheritParentSecrets": false,
+    "sandboxRequired": false,
+    "networkDefaultDeny": false,
+    "permissionMode": "dontAsk"
+  },
+  "integrations": {
+    "siem-be": {
+      "auth": "internal-jwt",
+      "baseUrl": "${SIEM_BE_BASE_URL}",
+      "apis": [
+        "GET /api/v1/signals/{signal_id}",
+        "GET /api/v1/events",
+        "POST /api/v1/events/search/query",
+        "GET /api/v1/investigate/{entity}",
+        "GET /api/v1/graph/{entity}",
+        "GET /api/v1/threat-intel/indicators",
+        "GET /api/v1/identities/{id}",
+        "GET /api/v1/rules/{rule_id}"
+      ]
+    },
+    "core": {
+      "auth": "internal-jwt",
+      "baseUrl": "${CORE_BASE_URL}",
+      "apis": [
+        "POST /api/v1/notifications"
+      ]
+    },
+    "slack": {
+      "auth": "bot-token",
+      "action": "notify-only"
+    }
+  },
+  "phases": [
+    {
+      "id": "triage",
+      "role": "soc-triage-analyst",
+      "controller": "host",
+      "strategy": "single",
+      "requires": [],
+      "requiredArtifacts": ["01_triage_result.json"],
+      "optionalArtifacts": [],
+      "resultSchema": "nunchi.soc.monitor.triage-result.v2",
+      "description": "시그널 초기 분류: severity 확인, context 수집, 분석 필요 여부 판단"
+    },
+    {
+      "id": "analyze",
+      "role": "soc-monitor-analyst",
+      "controller": "host",
+      "strategy": "single",
+      "requires": ["triage"],
+      "requiredArtifacts": ["02_analysis_result.json"],
+      "optionalArtifacts": ["02_analysis_detail.md"],
+      "resultSchema": "nunchi.soc.monitor.analysis-result.v2",
+      "description": "심층 분석: 이벤트 상관관계, 위협 판단, 대응 권고 생성"
+    }
+  ],
+  "roles": {
+    "soc-triage-analyst": {
+      "agentFile": "agents/soc-triage-analyst.md",
+      "description": "시그널을 초기 분류하고 context를 수집하여 분석 우선순위를 결정",
+      "tools": [
+        "Read",
+        "mcp__nunchi_siem__get_signal",
+        "mcp__nunchi_siem__search_events",
+        "mcp__nunchi_siem__get_rule",
+        "mcp__nunchi_siem__get_threat_intel"
+      ],
+      "skills": [],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output"
+      ]
+    },
+    "soc-monitor-analyst": {
+      "agentFile": "agents/soc-monitor-analyst.md",
+      "description": "시그널과 관련 이벤트를 심층 분석하여 위협 수준과 대응 권고를 생성",
+      "tools": [
+        "Read",
+        "mcp__nunchi_siem__get_signal",
+        "mcp__nunchi_siem__search_events",
+        "mcp__nunchi_siem__get_rule",
+        "mcp__nunchi_siem__get_threat_intel",
+        "mcp__nunchi_siem__get_identity",
+        "mcp__nunchi_siem__investigate_entity",
+        "mcp__nunchi_siem__get_entity_graph"
+      ],
+      "skills": [],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output"
+      ]
+    }
+  },
+  "output": {
+    "action": "slack-notify",
+    "channels": {
+      "critical": "${SLACK_CHANNEL_CRITICAL}",
+      "high": "${SLACK_CHANNEL_HIGH}",
+      "default": "${SLACK_CHANNEL_SOC}"
+    },
+    "format": "structured-alert",
+    "note": "분석 결과를 severity에 따라 적절한 슬랙 채널로 노티. 자동화 대응은 v3에서 추가."
+  },
+  "publication": null,
+  "resources": []
+}

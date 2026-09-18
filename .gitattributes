@@ -1,0 +1,5 @@
+domains/**/*.js text eol=lf
+domains/**/*.json text eol=lf
+domains/**/*.md text eol=lf
+domains/**/*.yaml text eol=lf
+domains/**/*.yml text eol=lf

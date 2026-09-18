@@ -1,0 +1,177 @@
+{
+  "id": "nunchi.soc.investigation",
+  "version": "1.0.0",
+  "domain": "soc",
+  "mission": "investigation",
+  "lifecycle": "finite",
+  "forbiddenModelTools": [
+    "Agent",
+    "Bash",
+    "Edit",
+    "Write",
+    "WebFetch",
+    "WebSearch"
+  ],
+  "limits": {
+    "maxIterations": 0,
+    "maxSubagentDepth": 0
+  },
+  "isolation": {
+    "settingSources": [],
+    "strictMcpConfig": true,
+    "disableAutoMemory": true,
+    "inheritParentSecrets": false,
+    "sandboxRequired": true,
+    "networkDefaultDeny": true,
+    "permissionMode": "dontAsk"
+  },
+  "roles": {
+    "soc-investigation-evidence-reviewer": {
+      "agentFile": "agents/soc-investigation-evidence-reviewer.md",
+      "description": "후보 분석을 보기 전에 조사 쿼리 원장과 증거 커버리지를 검토하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-investigation-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    },
+    "soc-investigator": {
+      "agentFile": "agents/soc-investigator.md",
+      "description": "호스트가 수집·봉인한 증거에서 대안 가설을 포함한 조사 분석을 제안하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-investigation-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    },
+    "soc-investigation-verifier": {
+      "agentFile": "agents/soc-investigation-verifier.md",
+      "description": "evidence-first 검토와 조사 분석을 대조해 근거·반증·확실성을 검증하는 역할",
+      "tools": [
+        "Read"
+      ],
+      "skills": [
+        "nunchi-soc:soc-investigation-contract"
+      ],
+      "allowedDelegates": [],
+      "requiredCapabilities": [
+        "structured-output",
+        "strict-tool-input",
+        "sandbox",
+        "tool-policy"
+      ]
+    }
+  },
+  "phases": [
+    {
+      "id": "evidence-review",
+      "role": "soc-investigation-evidence-reviewer",
+      "requires": [],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.investigation.evidence-review-result.v1",
+      "requiredMethodFiles": [
+        "methods/investigation-evidence-review.md"
+      ],
+      "requiredArtifacts": [
+        "02_soc_investigation_evidence_review.json"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    },
+    {
+      "id": "analyze",
+      "role": "soc-investigator",
+      "requires": [
+        "evidence-review"
+      ],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.investigation.analysis-result.v1",
+      "requiredMethodFiles": [
+        "methods/investigation-analyze.md"
+      ],
+      "requiredArtifacts": [
+        "03_soc_investigation_analysis.json"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    },
+    {
+      "id": "verify",
+      "role": "soc-investigation-verifier",
+      "requires": [
+        "analyze"
+      ],
+      "controller": "host",
+      "strategy": "single",
+      "resultSchemaId": "nunchi.soc.investigation.verification-result.v1",
+      "requiredMethodFiles": [
+        "methods/investigation-verify.md"
+      ],
+      "requiredArtifacts": [
+        "04_soc_investigation_verification.json",
+        "05_soc_investigation_draft.md"
+      ],
+      "optionalArtifacts": [],
+      "approvals": []
+    }
+  ],
+  "failurePolicy": {
+    "validationFailure": "block"
+  },
+  "resources": [
+    {
+      "path": "contracts/soc-investigation-source-schema.v1.json",
+      "sha256": "0c9248cc3a0265c940985147e1be8cb63cd14ffca11ae4ad4b69c640aebca7b9"
+    },
+    {
+      "path": "contracts/soc-investigation-result-schemas.v1.json",
+      "sha256": "21b7a15584f3111d93941085c824ef65ad26dde3cc8a8db83673f34232b84276"
+    },
+    {
+      "path": "agents/soc-investigation-evidence-reviewer.md",
+      "sha256": "ceb87f7fbf21bce1a7ace5937c3854b57135d73aa20c331993895855f2ab4e80"
+    },
+    {
+      "path": "skills/soc-investigation-contract/SKILL.md",
+      "sha256": "ccd235aaf337d0df27edaef8f125ce52de3eb872983ff9783081d8e6729bb47a"
+    },
+    {
+      "path": "agents/soc-investigator.md",
+      "sha256": "acdc6c30cf39c55b8a0ad233f8b0467fa126fe274a951f7946cfe109ec59ed9f"
+    },
+    {
+      "path": "agents/soc-investigation-verifier.md",
+      "sha256": "9572623762461e9914b990f1ae073b30230927fd82f5728d4eaa31b142fdcf6d"
+    },
+    {
+      "path": "methods/investigation-evidence-review.md",
+      "sha256": "04a8132a626a8959c401d141408be48db0be77803a99098737cda3a4f0545ec4"
+    },
+    {
+      "path": "methods/investigation-analyze.md",
+      "sha256": "92aa9eba813898fcec821512fe6cab4b317c9b4cd85307001a562df5bf40a044"
+    },
+    {
+      "path": "methods/investigation-verify.md",
+      "sha256": "518817436da42adff5b68a2d513c2da5764934b9278662e14807b7eb8e692851"
+    }
+  ]
+}

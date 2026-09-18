@@ -1,0 +1,55 @@
+{
+  "name": "secops-soc-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --import tsx src/gateway/server.ts",
+    "worker": "node --env-file-if-exists=.env --import tsx src/gateway/workers/soc-entry.ts",
+    "soc:snapshot": "node --import tsx scripts/soc-snapshot.ts",
+    "eval:soc": "node --import tsx scripts/eval-soc.ts",
+    "run:admin": "node --import tsx scripts/run-admin.ts",
+    "generate:soc-schemas": "node --import tsx scripts/generate-soc-schemas.ts",
+    "generate:contract-resources": "node --import tsx scripts/generate-contract-resources.ts",
+    "check:contracts": "node --import tsx scripts/generate-soc-schemas.ts --check && node --import tsx scripts/generate-contract-resources.ts --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:all": "pnpm typecheck && pnpm check:contracts && pnpm test && pnpm eval:soc",
+    "soc:run": "node --env-file-if-exists=.env --import tsx scripts/run-soc.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
+    "tenant:create": "node --env-file-if-exists=.env --import tsx scripts/create-tenant.ts",
+    "build:library": "node scripts/build-library.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
+    "@hono/node-server": "1.14.1",
+    "bullmq": "5.52.1",
+    "hono": "4.7.10",
+    "ioredis": "5.6.1",
+    "pg": "^8.22.0",
+    "tsx": "^4.22.4",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.18",
+    "@types/pg": "^8.20.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./source": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "types": "./dist/src/index.d.ts",
+  "main": "./dist/src/index.js"
+}

@@ -1,0 +1,444 @@
+{
+  "id": "nunchi.soc.investigation.source-schemas.v1",
+  "schemas": {
+    "nunchi.soc.prepared-snapshot.v1": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "nunchi.soc.prepared-snapshot.v1"
+        },
+        "snapshotId": {
+          "type": "string",
+          "pattern": "^snap-[a-z0-9][a-z0-9._-]{1,79}$"
+        },
+        "mission": {
+          "type": "string",
+          "enum": [
+            "report",
+            "investigation"
+          ]
+        },
+        "tenantId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+        },
+        "actorId": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "timeFrom": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "timeTo": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        },
+        "timezone": {
+          "type": "string",
+          "const": "UTC"
+        },
+        "windowSemantics": {
+          "type": "string",
+          "const": "half-open"
+        },
+        "providerSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "adapterVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          },
+          "required": [
+            "name",
+            "version",
+            "adapterVersion"
+          ],
+          "additionalProperties": false
+        },
+        "classification": {
+          "type": "string",
+          "enum": [
+            "public",
+            "internal",
+            "confidential",
+            "restricted"
+          ]
+        },
+        "containsSecrets": {
+          "type": "boolean",
+          "const": false
+        },
+        "containsRawPii": {
+          "type": "boolean",
+          "const": false
+        },
+        "redactionReceipt": {
+          "type": "object",
+          "properties": {
+            "receiptId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+            },
+            "policyId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "redactorVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "sourcePayloadSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "projectionSha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "issuer": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+            },
+            "keyId": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+            },
+            "issuedAt": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "signatureBase64": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+            },
+            "fieldsRemoved": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "approved": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": [
+            "receiptId",
+            "policyId",
+            "redactorVersion",
+            "sourcePayloadSha256",
+            "projectionSha256",
+            "issuer",
+            "keyId",
+            "issuedAt",
+            "signatureBase64",
+            "fieldsRemoved",
+            "approved"
+          ],
+          "additionalProperties": false
+        },
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "complete": {
+              "type": "boolean"
+            },
+            "gaps": {
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            }
+          },
+          "required": [
+            "complete",
+            "gaps"
+          ],
+          "additionalProperties": false
+        },
+        "queryReceipts": {
+          "minItems": 1,
+          "maxItems": 40,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "queryId": {
+                "type": "string",
+                "pattern": "^qry-[a-z0-9][a-z0-9._-]{1,79}$"
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "signal-search",
+                  "event-search-source",
+                  "event-search-destination",
+                  "entity-summary",
+                  "case-search"
+                ]
+              },
+              "subject": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "ip",
+                      "user",
+                      "host",
+                      "signal",
+                      "case"
+                    ]
+                  },
+                  "value": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 320
+                  }
+                },
+                "required": [
+                  "type",
+                  "value"
+                ],
+                "additionalProperties": false
+              },
+              "tenantId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+              },
+              "actorId": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{1,127}$"
+              },
+              "timeFrom": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "timeTo": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "pages": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "rows": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "cursorExhausted": {
+                "type": "boolean"
+              },
+              "responseSha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "queryId",
+              "operation",
+              "subject",
+              "tenantId",
+              "actorId",
+              "timeFrom",
+              "timeTo",
+              "pages",
+              "rows",
+              "cursorExhausted",
+              "responseSha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "records": {
+          "maxItems": 2000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locator": {
+                "type": "string",
+                "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+              },
+              "sourceQueryIds": {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^qry-[a-z0-9][a-z0-9._-]{1,79}$"
+                }
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "entityRefs": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 320
+                }
+              },
+              "facts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 320
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "locator",
+              "sourceQueryIds",
+              "timestamp",
+              "kind",
+              "entityRefs",
+              "facts"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "aggregates": {
+          "minItems": 1,
+          "maxItems": 500,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "locator": {
+                "type": "string",
+                "pattern": "^(?:rec|agg)-[a-z0-9][a-z0-9._-]{1,79}$"
+              },
+              "sourceQueryIds": {
+                "minItems": 1,
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^qry-[a-z0-9][a-z0-9._-]{1,79}$"
+                }
+              },
+              "metric": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "value": {
+                "type": "number"
+              },
+              "dimensions": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 320
+                }
+              }
+            },
+            "required": [
+              "locator",
+              "sourceQueryIds",
+              "metric",
+              "value",
+              "dimensions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "snapshotSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "schema",
+        "snapshotId",
+        "mission",
+        "tenantId",
+        "actorId",
+        "createdAt",
+        "timeFrom",
+        "timeTo",
+        "timezone",
+        "windowSemantics",
+        "providerSchema",
+        "classification",
+        "containsSecrets",
+        "containsRawPii",
+        "redactionReceipt",
+        "coverage",
+        "queryReceipts",
+        "records",
+        "aggregates",
+        "snapshotSha256"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
