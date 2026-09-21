@@ -44,3 +44,25 @@ it('passes application cancellation through the model call and preserves incompl
   const result = await agent.run(signalFor('a'), { signal: controller.signal });
   expect(result.status).toBe('incomplete'); expect(result.reason).toContain('application cancelled');
 });
+
+it('allows a trusted domain guard to reject a contradiction within the single correction budget', async () => {
+  const signal = signalFor('a');
+  const llm = { completeTurn: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: JSON.stringify(assessment(`signal:${signal.signalId}`)) }], stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } }) };
+  const guard = vi.fn(input => { input.assessment.decision = 'dismiss'; return 'Trusted incident state requires escalation'; });
+  const agent = createSocAgent({ llm, dataSource: { createConnector: () => ({ execute: vi.fn() }) }, assessmentGuard: guard });
+  const result = await agent.run(signal);
+  expect(result.status).toBe('incomplete'); expect(result.result).toBeUndefined();
+  expect(llm.completeTurn).toHaveBeenCalledTimes(2); expect(guard).toHaveBeenCalledTimes(2);
+  expect(result.reason).toContain('Trusted incident');
+});
+it('counts cache reads and writes in total input and applies the token limit', async () => {
+  const fetchImpl = vi.fn(async (_url, init) => {
+    expect(JSON.parse(init.body).system[0].cache_control).toEqual({ type: 'ephemeral' });
+    return Response.json({ content: [{ type: 'tool_use', id: 't1', name: 'get_signal', input: { signalId: 'signal-a', reason: 'Check observed event', evidenceIds: ['signal:signal-a'] } }], stop_reason: 'tool_use',
+      usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 200 } });
+  });
+  const execute = vi.fn();
+  const result = await createSocAgent({ llm: new SocLlmClient({ apiKey: 'fixture', fetchImpl: fetchImpl as typeof fetch }), dataSource: { createConnector: () => ({ execute }) }, limits: { maxTotalTokens: 1000 } }).run(signalFor('a'));
+  expect(result.usage).toEqual({ inputTokens: 1210, outputTokens: 5, cacheReadTokens: 1000, cacheWriteTokens: 200 });
+  expect(result.status).toBe('incomplete'); expect(execute).not.toHaveBeenCalled(); expect(fetchImpl).toHaveBeenCalledTimes(1);
+});

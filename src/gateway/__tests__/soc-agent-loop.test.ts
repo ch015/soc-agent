@@ -126,3 +126,46 @@ describe('grounded assessment', () => {
   it('rejects fabricated evidence references', () => expect(() => validateAssessment({ ...assessment, evidenceIds: ['E999'] }, [], 'signal:s1')).toThrow('evidence reference'));
   it('does not turn API failure into benign', () => expect(() => validateAssessment({ ...assessment, decision: 'dismiss', threatLevel: 'benign', unresolved: [] }, [{ evidenceId: 'E1', tool: 'lookup', input: {}, ok: false, truncated: false, data: null }], 'signal:s1')).toThrow('incomplete evidence'));
 });
+
+
+describe('bounded concurrent investigation', () => {
+  it('coalesces same-turn duplicates and sends only a reference for reuse', async () => {
+    const batch = call(); batch.content.push({ ...batch.content[0]!, id: 't2' });
+    const s = setup([batch, done()]); s.execute.mockResolvedValue({ detail: 'x'.repeat(12000) });
+    const run = await s.run();
+    expect(s.execute).toHaveBeenCalledTimes(1); expect(run.actions[1]?.cached).toBe(true);
+    const messages = s.llm.completeTurn.mock.calls[1]![0].messages;
+    const results = messages[2].content;
+    expect(results[0].content.length).toBeGreaterThan(12000);
+    expect(results[1].content.length).toBeLessThan(300);
+    expect(JSON.parse(results[1].content)).toMatchObject({ evidenceId: 'E1', cached: true, ok: true });
+  });
+  it('limits concurrency and preserves IDs despite out-of-order completion', async () => {
+    const batch = call();
+    batch.content.push(...['second', 'third'].map((subject, i) => ({ ...call('lookup', { subject }).content[0]!, id: `t${i + 2}` })));
+    const s = setup([batch, done()], { maxConcurrentTools: 2 });
+    let active = 0, peak = 0; const releases: Array<() => void> = [];
+    s.execute.mockImplementation(async args => {
+      peak = Math.max(peak, ++active);
+      await new Promise<void>(resolve => releases.push(resolve)); active--;
+      return { subject: args.subject };
+    });
+    const pending = s.run();
+    await vi.waitFor(() => expect(releases).toHaveLength(2)); releases[1]!();
+    await vi.waitFor(() => expect(releases).toHaveLength(3)); releases[2]!(); releases[0]!();
+    const run = await pending;
+    expect(peak).toBe(2); expect(run.status).toBe('completed');
+    expect(run.observations.map(o => [o.evidenceId, o.data])).toEqual([
+      ['E1', { subject: 'observed-host' }], ['E2', { subject: 'second' }], ['E3', { subject: 'third' }],
+    ]);
+  });
+  it('cancels in-flight calls without dispatching queued lookups', async () => {
+    const batch = call(); batch.content.push(...['second', 'third'].map((subject, i) => ({ ...call('lookup', { subject }).content[0]!, id: `t${i + 2}` })));
+    const controller = new AbortController(); const s = setup([batch], { signal: controller.signal, maxConcurrentTools: 2 });
+    s.execute.mockImplementation(async (_args, signal) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true })));
+    const pending = s.run(); await vi.waitFor(() => expect(s.execute).toHaveBeenCalledTimes(2));
+    controller.abort(new Error('cancelled'));
+    const run = await pending; expect(run.status).toBe('incomplete'); expect(run.reason).toContain('cancelled');
+    expect(s.execute).toHaveBeenCalledTimes(2);
+  });
+});

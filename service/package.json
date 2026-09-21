@@ -1,0 +1,27 @@
+{
+  "name": "secops-soc-agent-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env dist/src/gateway/server.js",
+    "worker": "node --env-file-if-exists=.env dist/src/gateway/workers/soc-entry.js",
+    "db:migrate": "node --env-file-if-exists=.env dist/scripts/migrate.js",
+    "tenant:create": "node --env-file-if-exists=.env dist/scripts/create-tenant.js",
+    "soc:run": "node --env-file-if-exists=.env dist/scripts/run-soc.js",
+    "soc:snapshot": "node dist/scripts/soc-snapshot.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.229",
+    "@hono/node-server": "1.14.1",
+    "bullmq": "5.52.1",
+    "hono": "4.7.10",
+    "ioredis": "5.6.1",
+    "pg": "^8.22.0",
+    "zod": "4.4.3"
+  }
+}

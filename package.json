@@ -18,23 +18,25 @@
     "soc:run": "node --env-file-if-exists=.env --import tsx scripts/run-soc.ts",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
     "tenant:create": "node --env-file-if-exists=.env --import tsx scripts/create-tenant.ts",
-    "build:library": "node scripts/build-library.mjs"
+    "build:library": "node scripts/build-library.mjs",
+    "build:service": "node scripts/build-service.mjs",
+    "verify:core": "node scripts/verify-core.mjs"
   },
   "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.18",
+    "@types/pg": "^8.20.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
     "@anthropic-ai/claude-agent-sdk": "0.3.229",
     "@hono/node-server": "1.14.1",
     "bullmq": "5.52.1",
     "hono": "4.7.10",
     "ioredis": "5.6.1",
     "pg": "^8.22.0",
-    "tsx": "^4.22.4",
-    "zod": "^4.1.12"
-  },
-  "devDependencies": {
-    "@types/node": "^22.19.18",
-    "@types/pg": "^8.20.4",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "tsx": "^4.22.4"
   },
   "engines": {
     "node": ">=22.18.0"
@@ -51,5 +53,12 @@
     }
   },
   "types": "./dist/src/index.d.ts",
-  "main": "./dist/src/index.js"
+  "main": "./dist/src/index.js",
+  "files": [
+    "dist",
+    "src/index.ts",
+    "src/api/*.ts",
+    "src/runtime/investigation/*.ts",
+    "src/runtime/missions/investigate-signal.ts"
+  ]
 }

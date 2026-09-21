@@ -1,6 +1,7 @@
 import { investigateSignal } from '../runtime/missions/investigate-signal.js';
 import { SocSignalSchema, type SocSignal } from '../runtime/investigation/signal.js';
 import type { SocLlmClient } from '../runtime/investigation/llm-client.js';
+import type { AssessmentGuard } from '../runtime/investigation/investigation-policy.js';
 import type { InvestigationConnector } from '../runtime/investigation/investigation-connector.js';
 
 export type SocModel = Pick<SocLlmClient, 'completeTurn'>;
@@ -12,7 +13,8 @@ export type SocAgentOptions = {
   dataSource: SocDataSource;
   capabilities?: string[];
   context?: string;
-  limits?: { maxTurns?: number; maxToolCalls?: number; timeoutMs?: number; maxTotalTokens?: number };
+  limits?: { maxTurns?: number; maxToolCalls?: number; timeoutMs?: number; maxTotalTokens?: number; maxConcurrentTools?: number };
+  assessmentGuard?: AssessmentGuard;
 };
 export type SocRunResult = Awaited<ReturnType<typeof investigateSignal>>;
 
@@ -29,7 +31,7 @@ export function createSocAgent(options: SocAgentOptions) {
         ? { connector: source.createConnector(signal) }
         : { connector: source.kind, baseUrl: source.baseUrl, token: source.token };
       return investigateSignal({ signal, context: execution.context ?? settings.context,
-        ...connection, ...settings.limits, capabilities: settings.capabilities },
+        ...connection, ...settings.limits, assessmentGuard: settings.assessmentGuard, capabilities: settings.capabilities },
       { llm: settings.llm, signal: execution.signal, ...('fetchImpl' in source ? { fetchImpl: source.fetchImpl } : {}) });
     },
   };

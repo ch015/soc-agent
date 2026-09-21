@@ -19,7 +19,7 @@ export interface InvestigationRun<T> {
   observations: Observation[];
   actions: Array<{ tool: string; reason: string; evidenceId?: string; cached?: boolean; error?: string }>;
   modelCalls: number;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
 }
 
 /** The model owns investigation order; the host executes and bounds actions. */
@@ -35,6 +35,7 @@ export async function investigate<T>(input: {
   maxToolCalls?: number;
   timeoutMs?: number;
   maxTotalTokens?: number;
+  maxConcurrentTools?: number;
   beforeTurn?: () => Promise<void>;
 }): Promise<InvestigationRun<T>> {
   const run: InvestigationRun<T> = {
@@ -43,6 +44,7 @@ export async function investigate<T>(input: {
   };
   const maxTurns = bounded(input.maxTurns, 8, 1, 16);
   const maxTools = bounded(input.maxToolCalls, 12, 1, 32);
+  const concurrency = bounded(input.maxConcurrentTools, 2, 1, 4);
   const tokenLimit = bounded(input.maxTotalTokens, 60_000, 1, 200_000);
   const timeoutMs = bounded(input.timeoutMs, 120_000, 1, 300_000);
   const controller = new AbortController();
@@ -73,6 +75,9 @@ export async function investigate<T>(input: {
       run.modelCalls++;
       run.usage.inputTokens += response.usage.inputTokens;
       run.usage.outputTokens += response.usage.outputTokens;
+      for (const key of ['cacheReadTokens', 'cacheWriteTokens'] as const) {
+        if (response.usage[key] !== undefined) run.usage[key] = (run.usage[key] ?? 0) + response.usage[key]!;
+      }
       signal.throwIfAborted();
       const calls = response.content.filter(block => block.type === 'tool_use');
       if (calls.length === 0) {
@@ -92,13 +97,15 @@ export async function investigate<T>(input: {
       }
       if (response.stopReason !== 'tool_use') throw new Error('incomplete tool request');
       messages.push({ role: 'assistant', content: response.content });
-      const results: Array<Record<string, unknown>> = [];
+      const results: Array<Record<string, unknown>> = new Array(calls.length);
       const observedBeforeTurn = new Set(evidence);
+      const jobs: Array<{ tool: InvestigationTool; args: Record<string, unknown>; observation: Observation; index: number }> = [];
+      const reused: Array<{ observation: Observation; index: number }> = [];
       let newEvidence = false;
-      for (const call of calls) {
+      // Reserve IDs and request budget in model order before any asynchronous work.
+      for (const [index, call] of calls.entries()) {
         signal.throwIfAborted();
         const name = String(call.name ?? '');
-        const id = String(call.id ?? '');
         let reason = '';
         try {
           if (run.usage.inputTokens + run.usage.outputTokens >= tokenLimit) throw new Error('investigation token limit reached');
@@ -116,17 +123,34 @@ export async function investigate<T>(input: {
           const cached = cache.get(key);
           if (cached) {
             run.actions.push({ tool: name, reason, evidenceId: cached.evidenceId, cached: true });
-            results.push({ type: 'tool_result', tool_use_id: id, is_error: !cached.ok, content: JSON.stringify(cached) });
+            reused.push({ observation: cached, index });
             continue;
           }
           const observation: Observation = {
             evidenceId: `E${run.observations.length + 1}`, tool: name, input: request,
-            ok: true, data: null, truncated: false,
+            ok: false, data: { note: 'Investigation did not finish this lookup.' }, truncated: false,
           };
+          run.observations.push(observation);
+          cache.set(key, observation);
+          run.actions.push({ tool: name, reason, evidenceId: observation.evidenceId });
+          jobs.push({ tool, args, observation, index });
+        } catch (error) {
+          signal.throwIfAborted();
+          const message = safeError(error);
+          run.actions.push({ tool: name, reason, error: message });
+          results[index] = { type: 'tool_result', tool_use_id: call.id, is_error: true, content: message };
+        }
+      }
+      let nextJob = 0;
+      const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => {
+        while (nextJob < jobs.length) {
+          signal.throwIfAborted();
+          const { tool, args, observation, index } = jobs[nextJob++]!;
           try {
             const data = await tool.execute(args, signal);
             signal.throwIfAborted();
             const serialized = JSON.stringify(data);
+            if (serialized === undefined) throw new Error('tool returned no evidence');
             const oversized = serialized.length > 16_000;
             const coverage = data && typeof data === 'object' ? data as Record<string, unknown> : {};
             const metadata = coverage._meta && typeof coverage._meta === 'object' ? coverage._meta as Record<string, unknown> : {};
@@ -135,23 +159,24 @@ export async function investigate<T>(input: {
             observation.data = oversized
               ? { excerpt: serialized.slice(0, 16_000), note: 'Partial response. Narrow the query if omitted evidence could change the decision.' }
               : data;
+            observation.ok = true;
             newEvidence = true;
           } catch (error) {
-            signal.throwIfAborted();
             observation.ok = false;
             observation.data = { error: safeError(error), note: 'Unavailable evidence is not a negative finding.' };
+            signal.throwIfAborted();
           }
-          run.observations.push(observation);
           evidence.add(observation.evidenceId);
-          cache.set(key, observation);
-          run.actions.push({ tool: name, reason, evidenceId: observation.evidenceId });
-          results.push({ type: 'tool_result', tool_use_id: id, is_error: !observation.ok, content: JSON.stringify(observation) });
-        } catch (error) {
-          signal.throwIfAborted();
-          const message = safeError(error);
-          run.actions.push({ tool: name, reason, error: message });
-          results.push({ type: 'tool_result', tool_use_id: id, is_error: true, content: message });
+          results[index] = { type: 'tool_result', tool_use_id: calls[index]!.id, is_error: !observation.ok, content: JSON.stringify(observation) };
         }
+      }));
+      const failed = workers.find(worker => worker.status === 'rejected');
+      if (failed?.status === 'rejected') throw failed.reason;
+      signal.throwIfAborted();
+      for (const { observation, index } of reused) {
+        results[index] = { type: 'tool_result', tool_use_id: calls[index]!.id, is_error: !observation.ok,
+          content: JSON.stringify({ evidenceId: observation.evidenceId, cached: true, ok: observation.ok,
+            truncated: observation.truncated, note: 'Reuse the original observation already in this conversation; no lookup was repeated.' }) };
       }
       messages.push({ role: 'user', content: results });
       noProgress = newEvidence ? 0 : noProgress + 1;

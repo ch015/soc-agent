@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SocSignal } from './signal.js';
 import type { Observation } from './agent-loop.js';
 
 export const AssessmentSchema = z.object({
@@ -17,6 +18,9 @@ export const AssessmentSchema = z.object({
   stopReason: z.enum(['sufficient-evidence', 'no-useful-next-action', 'needs-human', 'budget-exhausted']),
 }).strict();
 export type Assessment = z.infer<typeof AssessmentSchema>;
+/** Return a concise contradiction/missing-fact reason to request the bounded final correction. */
+export type AssessmentGuard = (input: { assessment: Readonly<Assessment>; observations: readonly Observation[];
+  signal: Readonly<SocSignal> }) => string | undefined;
 
 export const SOC_INVESTIGATION_GUIDE = `You are a SOC investigation agent. Decide what to investigate next and when to finish.
 Use the supplied signal and read-only tools to determine whether escalation is justified. Write the assessment in Korean.

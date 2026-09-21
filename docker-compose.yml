@@ -35,7 +35,7 @@ services:
       retries: 20
   migrate:
     <<: *app
-    command: ["node", "--import", "tsx", "scripts/migrate.ts"]
+    command: ["node", "dist/scripts/migrate.js"]
     restart: "no"
     depends_on:
       postgres: { condition: service_healthy }
@@ -52,7 +52,7 @@ services:
       retries: 5
   soc-worker:
     <<: *app
-    command: ["node", "--import", "tsx", "src/gateway/workers/soc-entry.ts"]
+    command: ["node", "dist/src/gateway/workers/soc-entry.js"]
     environment:
       <<: *environment
       SIEM_BE_BASE_URL: ${SIEM_BE_BASE_URL:-http://host.docker.internal:8080}

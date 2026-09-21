@@ -1,6 +1,6 @@
 # secops-soc-agent
 
-문서 기준: 2026-09-18. [현재 개발 현황](../docs/development-status.ko.md) · [문서 목록](docs/README.md)
+문서 기준: 2026-09-21. [현재 개발 현황](../docs/development-status.ko.md) · [문서 목록](docs/README.md)
 
 기존 앱에서 직접 호출하는 공개 API: [`createSocAgent`](src/index.ts). `pnpm build:library` 후 모듈 import로 사용할 수 있습니다. [코드 연동 가이드](docs/embedding.md) · [앱 예제](../examples/embedded-app/agents.mjs)
 
@@ -13,7 +13,8 @@ SOC 전용 라이브러리와 독립 서비스. `secops-nunchi-agent`에서 실�
 `createSocAgent()`에 모델과 `dataSource`를 전달한다. `dataSource.createConnector(signal)`로
 앱의 기존 DB/조회 서비스를 직접 연결하거나 `nunchi-core` / `http-json` HTTP connector를
 선택한다. [연동 가이드](docs/embedding.md)와 [8개 도구의 데이터 규약](docs/data-connectors.md)을 참조한다.
-코드 연동은 PostgreSQL/Redis/Slack 서버를 요구하지 않는다.
+코드 연동의 필수 런타임 의존성은 Zod 하나다. SDK/PostgreSQL/Redis/Slack 없이 실행한다.
+Gateway·worker·v1 실행은 [선택형 서비스 빌드](service/README.md)에 기존 의존성을 유지한다.
 
 ## 기존 서비스 실행
 
@@ -55,7 +56,7 @@ curl -H 'Authorization: Bearer <tenant-api-key>' http://localhost:3001/api/v1/jo
 
 ```bash
 docker compose up --build -d
-docker compose run --rm gateway node --import tsx scripts/create-tenant.ts local-soc
+docker compose run --rm gateway node dist/scripts/create-tenant.js local-soc
 docker compose logs -f gateway soc-worker
 docker compose down
 ```
