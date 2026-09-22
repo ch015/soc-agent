@@ -6,6 +6,8 @@ import type { Job, JobEvent, JobStatus, CanonicalRequest, ResultCallback } from 
 const { Pool } = pg;
 
 export type PgPool = InstanceType<typeof Pool>;
+/** Both a pool and a transaction-bound client can execute store queries. */
+export type PgQuery = Pick<PgPool, 'query'>;
 
 export function createPool(connectionString: string): PgPool {
   return new Pool({ connectionString, max: 20 });
@@ -21,7 +23,7 @@ export interface CreateJobParams {
   priority?: number;
 }
 
-export async function createJob(pool: PgPool, params: CreateJobParams): Promise<Job> {
+export async function createJob(pool: PgQuery, params: CreateJobParams): Promise<Job> {
   const { tenantId, domain, input, callback, priority = 3 } = params;
   const { rows } = await pool.query(
     `INSERT INTO jobs (tenant_id, domain, input, callback, priority, status)
@@ -32,7 +34,7 @@ export async function createJob(pool: PgPool, params: CreateJobParams): Promise<
   return mapRow(rows[0]);
 }
 
-export async function getJob(pool: PgPool, jobId: string): Promise<Job | null> {
+export async function getJob(pool: PgQuery, jobId: string): Promise<Job | null> {
   const { rows } = await pool.query(`SELECT * FROM jobs WHERE id = $1`, [jobId]);
   return rows.length ? mapRow(rows[0]) : null;
 }
@@ -121,16 +123,16 @@ export async function updateJob(
   return rows.length ? mapRow(rows[0]) : null;
 }
 
-export async function countActive(pool: PgPool, tenantId: string, domain: string): Promise<number> {
+export async function countActive(pool: PgQuery, tenantId: string, domain: string): Promise<number> {
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS count FROM jobs
-     WHERE tenant_id = $1 AND domain = $2 AND status IN ('queued', 'running', 'waiting')`,
+     WHERE tenant_id = $1 AND domain = $2 AND status IN ('queued', 'running', 'waiting', 'action_pending', 'action_executing')`,
     [tenantId, domain],
   );
   return rows[0].count;
 }
 
-export async function countToday(pool: PgPool, tenantId: string, domain: string): Promise<number> {
+export async function countToday(pool: PgQuery, tenantId: string, domain: string): Promise<number> {
   const { rows } = await pool.query(
     `SELECT COUNT(*)::int AS count FROM jobs
      WHERE tenant_id = $1 AND domain = $2 AND created_at >= CURRENT_DATE`,
@@ -218,7 +220,7 @@ export async function findTenantBySlackTeam(pool: PgPool, teamId: string): Promi
   return rows.length ? mapTenantRow(rows[0]) : null;
 }
 
-export async function findTenantById(pool: PgPool, id: string): Promise<Tenant | null> {
+export async function findTenantById(pool: PgQuery, id: string): Promise<Tenant | null> {
   const { rows } = await pool.query(
     `SELECT * FROM tenants WHERE id = $1`,
     [id],

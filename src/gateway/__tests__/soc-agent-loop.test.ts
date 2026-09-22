@@ -129,6 +129,40 @@ describe('grounded assessment', () => {
 
 
 describe('bounded concurrent investigation', () => {
+  it.each(['model', 'tool', 'beforeTurn'])('enforces its deadline when %s ignores cancellation', async stage => {
+    const stalled = new Promise<never>(() => {});
+    const s = setup([call(), done()], { timeoutMs: 20, ...(stage === 'beforeTurn' ? { beforeTurn: () => stalled } : {}) });
+    if (stage === 'model') s.llm.completeTurn.mockReset().mockReturnValue(stalled);
+    if (stage === 'tool') s.execute.mockReturnValue(stalled);
+    const run = await s.run();
+    expect(run.status).toBe('incomplete'); expect(run.reason).toContain('deadline exceeded');
+  }, 500);
+
+  it('keeps returned evidence unchanged when a timed-out connector resolves late', async () => {
+    let release!: (value: unknown) => void;
+    const s = setup([call(), done()], { timeoutMs: 20 });
+    s.execute.mockReturnValue(new Promise(resolve => { release = resolve; }));
+    const run = await s.run(), before = JSON.stringify(run);
+    release({ complete: true }); await new Promise(resolve => setTimeout(resolve, 10));
+    expect(JSON.stringify(run)).toBe(before); expect(s.llm.completeTurn).toHaveBeenCalledTimes(1);
+  }, 500);
+
+  it.each([Number.NaN, -1, Infinity, 1.5, undefined])('rejects invalid custom-provider token accounting %s', async inputTokens => {
+    const s = setup([{ ...call(), usage: { inputTokens: inputTokens as number, outputTokens: 1 } }, done()]);
+    const run = await s.run();
+    expect(run.status).toBe('incomplete'); expect(run.reason).toContain('usage');
+    expect(s.execute).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing', 'duplicate'])('rejects %s tool IDs before executing connectors', async invalid => {
+    const batch = call();
+    if (invalid === 'missing') Reflect.deleteProperty(batch.content[0]!, 'id');
+    else batch.content.push({ ...call('lookup', { subject: 'other' }).content[0]! });
+    const s = setup([batch, done()]); const run = await s.run();
+    expect(run.status).toBe('incomplete'); expect(run.reason).toContain('tool IDs');
+    expect(s.execute).not.toHaveBeenCalled();
+  });
+
   it('coalesces same-turn duplicates and sends only a reference for reuse', async () => {
     const batch = call(); batch.content.push({ ...batch.content[0]!, id: 't2' });
     const s = setup([batch, done()]); s.execute.mockResolvedValue({ detail: 'x'.repeat(12000) });

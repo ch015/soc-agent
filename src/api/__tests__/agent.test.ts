@@ -66,3 +66,15 @@ it('counts cache reads and writes in total input and applies the token limit', a
   expect(result.usage).toEqual({ inputTokens: 1210, outputTokens: 5, cacheReadTokens: 1000, cacheWriteTokens: 200 });
   expect(result.status).toBe('incomplete'); expect(execute).not.toHaveBeenCalled(); expect(fetchImpl).toHaveBeenCalledTimes(1);
 });
+
+it('preserves prototype methods and private state in application data sources', async () => {
+  const execute = vi.fn(async () => ({ complete: true }));
+  class DataSource {
+    #execute = execute;
+    createConnector() { return { execute: this.#execute }; }
+  }
+  const llm: SocModel = { async completeTurn() {
+    return { content: [{ type: 'text', text: JSON.stringify(assessment('signal:signal-a')) }], stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 1 } };
+  } };
+  expect((await createSocAgent({ llm, dataSource: new DataSource() }).run(signalFor('a'))).status).toBe('completed');
+});

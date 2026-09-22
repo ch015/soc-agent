@@ -5,7 +5,7 @@ import type { Redis } from 'ioredis';
 
 import type { PgPool } from '../job/store.js';
 import { getJob } from '../job/store.js';
-import { transitionJob } from '../job/lifecycle.js';
+import { isTerminal, transitionJob } from '../job/lifecycle.js';
 import type { Job, DomainType } from '../job/types.js';
 import type { DomainQueueConfig } from '../job/queue-config.js';
 
@@ -50,8 +50,13 @@ export function createDomainWorker(
         throw new Error(`Job ${jobId} not found in database`);
       }
 
-      // Transition to running (handle resume from waiting)
-      if (job.status === 'queued' || job.status === 'waiting') {
+      // Late/repeated deliveries must not restart terminal or unanswered work.
+      if (isTerminal(job.status) || job.status === 'waiting' || job.status === 'action_pending') return;
+      if (job.status === 'failed') {
+        await transitionJob(pool, job, 'queued', { error: null });
+        job.status = 'queued';
+      }
+      if (job.status === 'queued') {
         await transitionJob(pool, job, 'running');
         job.status = 'running';
       }

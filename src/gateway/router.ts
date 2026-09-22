@@ -1,12 +1,14 @@
 /** Register all routes on the Hono app. */
 import { Hono } from 'hono';
+import { z } from 'zod';
+import { readJson, requestId, pagination } from './request-validation.js';
 
 import type { PgPool } from './job/store.js';
 import type { RedisConnection } from './job/queue.js';
 import { bearerAuth } from './auth/tenant.js';
-import { checkQuota, QuotaError } from './auth/tenant.js';
+import { QuotaError } from './auth/tenant.js';
+import { admitSocJob, deliverAdmission, QueueDeliveryError } from './job/admission.js';
 import {
-  createJob,
   getJob,
   listJobs,
   type Tenant,
@@ -15,8 +17,6 @@ import { listAuditEvents } from './approval/audit.js';
 import { enqueue } from './job/queue.js';
 import { transitionJob } from './job/lifecycle.js';
 import { handleJobStream } from './stream/sse.js';
-import { isDuplicate } from './job/deduplication.js';
-import { getQueueConfig } from './job/queue-config.js';
 import { CanonicalRequestSchema, type CanonicalRequest, type JobStatus } from './job/types.js';
 export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection): void {
 
@@ -30,7 +30,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
   // POST /api/v1/jobs — submit a new job
   jobs.post('/', async (c) => {
     const tenant = (c as unknown as { get(key: string): unknown }).get('tenant') as Tenant;
-    const raw = await c.req.json();
+    const raw = await readJson(c);
     const parsed = CanonicalRequestSchema.safeParse(raw);
     if (!parsed.success) {
       return c.json({ error: 'Invalid request body', details: parsed.error.issues }, 400);
@@ -38,39 +38,21 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
     const body = parsed.data as CanonicalRequest;
 
     try {
-      await checkQuota(pool, tenant, body.domain);
-    } catch (err) {
-      if (err instanceof QuotaError) {
-        return c.json({ error: err.message }, 429);
+      const admission = await admitSocJob(pool, { tenantId: tenant.id, request: body,
+        priority: (body.options?.priority as number) ?? 3 });
+      await deliverAdmission(admission, redis);
+      if (admission.kind === 'duplicate') return c.json({ duplicate: true, jobId: admission.job.id });
+      return c.json({ id: admission.job.id, status: admission.job.status }, 201);
+    } catch (error) {
+      if (error instanceof QuotaError) return c.json({ error: error.message }, 429);
+      if (error instanceof QueueDeliveryError) {
+        // Without a stable key, a repeated POST can create a second job.
+        const retryable = typeof body.options?.dedupKey === 'string';
+        if (retryable) c.header('Retry-After', '5');
+        return c.json({ error: error.message, jobId: error.jobId, retryable }, 503);
       }
-      throw err;
+      throw error;
     }
-
-    // Dedup check for domains with deduplication configured
-    const queueCfg = getQueueConfig(body.domain);
-    if (queueCfg.deduplication && body.options?.dedupKey) {
-      const existingId = await isDuplicate(
-        pool,
-        tenant.id,
-        body.domain,
-        body.options.dedupKey as string,
-        queueCfg.deduplication.windowMs,
-      );
-      if (existingId) {
-        return c.json({ duplicate: true, jobId: existingId });
-      }
-    }
-
-    const job = await createJob(pool, {
-      tenantId: tenant.id,
-      domain: body.domain,
-      input: body,
-      callback: body.callback,
-      priority: (body.options?.priority as number) ?? 3,
-    });
-
-    await enqueue(body.domain, job, redis);
-    return c.json({ id: job.id, status: job.status }, 201);
   });
 
   // GET /api/v1/jobs — list jobs for tenant
@@ -78,15 +60,14 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
     const status = c.req.query('status') as JobStatus | undefined;
     const domain = c.req.query('domain') as string | undefined;
-    const limit = parseInt(c.req.query('limit') ?? '50', 10);
-    const offset = parseInt(c.req.query('offset') ?? '0', 10);
+    const { limit, offset } = pagination(c);
     const list = await listJobs(pool, tenantId, { status, domain, limit, offset });
     return c.json(list);
   });
 
   // GET /api/v1/jobs/:id — get job status
   jobs.get('/:id', async (c) => {
-    const job = await getJob(pool, c.req.param('id'));
+    const job = await getJob(pool, requestId(c.req.param('id')));
     if (!job) return c.json({ error: 'Not found' }, 404);
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
     if (job.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -95,7 +76,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
 
   // GET /api/v1/jobs/:id/result — get job result
   jobs.get('/:id/result', async (c) => {
-    const job = await getJob(pool, c.req.param('id'));
+    const job = await getJob(pool, requestId(c.req.param('id')));
     if (!job) return c.json({ error: 'Not found' }, 404);
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
     if (job.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -107,7 +88,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
 
   // POST /api/v1/jobs/:id/input — submit input for a waiting job
   jobs.post('/:id/input', async (c) => {
-    const job = await getJob(pool, c.req.param('id'));
+    const job = await getJob(pool, requestId(c.req.param('id')));
     if (!job) return c.json({ error: 'Not found' }, 404);
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
     if (job.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -115,7 +96,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
       return c.json({ error: 'Job is not waiting for input', status: job.status }, 409);
     }
 
-    const input = await c.req.json();
+    const input = await readJson(c);
     // Transition back to running will happen in the worker; re-enqueue.
     await transitionJob(pool, job, 'running', { pendingInput: input as Record<string, unknown> });
     await enqueue(job.domain, { ...job, status: 'running', pendingInput: input as Record<string, unknown> }, redis);
@@ -124,7 +105,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
 
   // DELETE /api/v1/jobs/:id — cancel a job
   jobs.delete('/:id', async (c) => {
-    const job = await getJob(pool, c.req.param('id'));
+    const job = await getJob(pool, requestId(c.req.param('id')));
     if (!job) return c.json({ error: 'Not found' }, 404);
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
     if (job.tenantId !== tenantId) return c.json({ error: 'Forbidden' }, 403);
@@ -138,7 +119,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
   });
 
   // GET /api/v1/jobs/:id/stream — SSE progress
-  jobs.get('/:id/stream', handleJobStream(pool));
+  jobs.get('/:id/stream', (c) => { requestId(c.req.param('id')); return handleJobStream(pool)(c); });
 
   app.route('/api/v1/jobs', jobs);
 
@@ -155,7 +136,7 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
   const approveRoute = new Hono();
   approveRoute.use('*', bearerAuth(pool));
   approveRoute.post('/:id/approve', async (c) => {
-    const jobId = c.req.param('id');
+    const jobId = requestId(c.req.param('id'));
     const job = await getJob(pool, jobId);
     if (!job) return c.json({ error: 'Not found' }, 404);
 
@@ -166,10 +147,12 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
       return c.json({ error: 'Job is not pending approval', status: job.status }, 409);
     }
 
-    const body = await c.req.json<{ decision: 'approve' | 'deny'; rationale?: string }>();
-    if (!body.decision || !['approve', 'deny'].includes(body.decision)) {
+    const parsed = z.object({ decision: z.enum(['approve', 'deny']), rationale: z.string().optional() }).safeParse(await readJson(c));
+    if (!parsed.success) {
       return c.json({ error: 'Invalid decision. Must be "approve" or "deny".' }, 400);
     }
+
+    const body = parsed.data;
 
     // Record audit event
     const { appendAuditEvent } = await import('./approval/audit.js');
@@ -241,9 +224,9 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
   auditRoutes.use('*', bearerAuth(pool));
   auditRoutes.get('/', async (c) => {
     const tenantId = (c as unknown as { get(key: string): unknown }).get('tenantId') as string;
-    const jobId = c.req.query('job') as string | undefined;
-    const limit = parseInt(c.req.query('limit') ?? '50', 10);
-    const offset = parseInt(c.req.query('offset') ?? '0', 10);
+    const requestedJob = c.req.query('job');
+    const jobId = requestedJob === undefined ? undefined : requestId(requestedJob);
+    const { limit, offset } = pagination(c);
 
     const events = await listAuditEvents(pool, { jobId, tenantId, limit, offset });
     return c.json(events);

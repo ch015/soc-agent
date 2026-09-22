@@ -1,6 +1,6 @@
 # SOC 도메인
 
-현재 구현 기준: 2026-09-18. 실행·배포는 [프로젝트 README](../../README.md), 앱 연결은 [embedding](../../docs/embedding.md)을 따른다.
+현재 구현 기준: 2026-09-22. 실행·배포는 [프로젝트 README](../../README.md), 앱 연결은 [embedding](../../docs/embedding.md)을 따른다.
 
 - v2: 모델의 조회 도구 선택 → 관측 → 후속 조사 또는 종료. 고정 heuristic/triage/analyze 파이프라인을 대체했다.
 - v1 report: evidence-review → judge → verify.
@@ -13,3 +13,6 @@ v1은 서명된 snapshot과 정확한 파일 허용 목록을 읽고 호스트�
 모델 실패·상한 내 결론 부재는 incomplete/inconclusive로 남긴다. 개별 조회 실패는 이용 불가 근거로 기록하며 다른 충분한 증거로 판정할 수 있으면 완료할 수 있다. `monitor`는 권고이며 백그라운드 예약이 아니다. 앱 호출의 알림/결과 저장은 호출 앱이 담당하고 기존 worker의 Slack 전달은 실제 응답으로 성공 여부를 기록한다.
 
 플러그인 이름 `nunchi-soc`과 `nunchi.soc.*` 계약 ID는 입력 호환성을 위해 유지한다.
+
+외부 정책 문서 검색은 아직 연결되지 않았다. [현재 정책 목록과 문서 추가 요청](../../docs/policy-documents.ko.md)을
+따르며, Feedback의 표준 registry·RAG를 SOC의 내장 기능으로 간주하지 않는다.

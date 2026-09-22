@@ -153,14 +153,14 @@ describe('Signal Correlation', () => {
 
   it('detects duplicate by signalId', async () => {
     mockRedis.exists.mockResolvedValue(1);
-    const isDuplicate = await correlation.bySignalId('det-001');
+    const isDuplicate = await correlation.bySignalId('tenant-internal', 'det-001');
     expect(isDuplicate).toBe(true);
-    expect(mockRedis.exists).toHaveBeenCalledWith('secops-soc:dedup:det-001');
+    expect(mockRedis.exists).toHaveBeenCalledWith('secops-soc:dedup:["tenant-internal","det-001"]');
   });
 
   it('returns false for new signalId', async () => {
     mockRedis.exists.mockResolvedValue(0);
-    const isDuplicate = await correlation.bySignalId('det-new');
+    const isDuplicate = await correlation.bySignalId('tenant-internal', 'det-new');
     expect(isDuplicate).toBe(false);
   });
 
@@ -170,7 +170,7 @@ describe('Signal Correlation', () => {
     const jobId = await correlation.byCorrelation(signal);
     expect(jobId).toBe('existing-job-123');
     expect(mockRedis.get).toHaveBeenCalledWith(
-      'secops-soc:corr:tenant-internal:ip:203.0.113.42:T1078.004',
+      'secops-soc:corr:["tenant-internal","ip","203.0.113.42","T1078.004"]',
     );
   });
 
@@ -190,8 +190,8 @@ describe('Signal Correlation', () => {
 
   it('marks signal as seen with TTL', async () => {
     mockRedis.set.mockResolvedValue('OK');
-    await correlation.markSeen('det-001', 'job-123');
-    expect(mockRedis.set).toHaveBeenCalledWith('secops-soc:dedup:det-001', 'job-123', 'EX', 300);
+    await correlation.markSeen('tenant-internal', 'det-001', 'job-123');
+    expect(mockRedis.set).toHaveBeenCalledWith('secops-soc:dedup:["tenant-internal","det-001"]', 'job-123', 'EX', 300);
   });
 
   it('sets correlation key with TTL', async () => {
@@ -199,11 +199,30 @@ describe('Signal Correlation', () => {
     const signal = makeValidSignal();
     await correlation.setCorrelation(signal, 'job-456');
     expect(mockRedis.set).toHaveBeenCalledWith(
-      'secops-soc:corr:tenant-internal:ip:203.0.113.42:T1078.004',
+      'secops-soc:corr:["tenant-internal","ip","203.0.113.42","T1078.004"]',
       'job-456',
       'EX',
       300,
     );
+  });
+
+  it('keeps identical signal IDs independent across tenants', async () => {
+    const values = new Map<string, string>();
+    mockRedis.set.mockImplementation(async (key, value) => { values.set(key, value); return 'OK'; });
+    mockRedis.exists.mockImplementation(async key => values.has(key) ? 1 : 0);
+    await correlation.markSeen('tenant-a', 'same-id', 'job-a');
+    expect(await correlation.bySignalId('tenant-a', 'same-id')).toBe(true);
+    expect(await correlation.bySignalId('tenant-b', 'same-id')).toBe(false);
+  });
+
+  it('does not conflate delimiter-bearing subject and rule pairs', async () => {
+    const values = new Map<string, string>();
+    mockRedis.set.mockImplementation(async (key, value) => { values.set(key, value); return 'OK'; });
+    mockRedis.get.mockImplementation(async key => values.get(key) ?? null);
+    const original = makeValidSignal({ subject: { type: 'host', value: 'a:b' }, rule: { id: 'c', name: 'r', category: 'test' } });
+    await correlation.setCorrelation(original, 'job-a');
+    expect(await correlation.byCorrelation(original)).toBe('job-a');
+    expect(await correlation.byCorrelation({ ...original, subject: { type: 'host', value: 'a' }, rule: { ...original.rule!, id: 'b:c' } })).toBeNull();
   });
 });
 

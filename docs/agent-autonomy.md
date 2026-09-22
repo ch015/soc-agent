@@ -1,6 +1,6 @@
 # SOC 자율 조사 지침
 
-현재 구현 기준: 2026-09-21. 앱 연결과 취소 사용법은 [코드 연동](embedding.md)을 참조한다.
+현재 구현 기준: 2026-09-22. 앱 연결과 취소 사용법은 [코드 연동](embedding.md)을 참조한다.
 
 v2 monitor는 모델이 도구와 종료 시점을 선택하는 `tool_use → tool_result → 다음 판단` 루프다. 고정된 API 수집 묶음, 별도 triage/analyze 호출, 심각도·이벤트 개수에 따른 heuristic 종결을 제거했다. v1 prepared snapshot 경로에는 같은 행동 지침을 추가했고 기존 독립 검토 순서를 유지한다.
 
@@ -36,3 +36,9 @@ v2 monitor는 모델이 도구와 종료 시점을 선택하는 `tool_use → to
 로컬 테스트는 관측에 따른 후속 대상 선택, 조기 종료, 중복/실패 조회 재사용, 근거 ID 검증, 예산·취소·한도, API 요청 형식, Slack 전달 결과를 검증한다. 병렬 호출의 순서·취소·동일 턴 중복과 cache 토큰 합계도 검사한다. 모델 응답을 스크립트로 주입한 검사이며 실제 모델의 판정 정확도나 프롬프트 준수율을 측정한 것은 아니다. 기존 `eval:soc`도 prepared snapshot 평가이며 신규 v2 실모델 평가를 대신하지 않는다.
 
 네이티브 도구 메시지 형식은 [Anthropic tool-call 문서](https://platform.claude.com/docs/en/agents-and-tools/tool-use/handle-tool-calls)를 따른다. 모델 식별자는 [Haiku 4.5 문서](https://platform.claude.com/docs/en/models/haiku-4-5/migration-guide)를 참조했다.
+
+## 정책 문서 적용 범위
+
+이 지침과 런타임 판정 검증이 현재 SOC의 내부 정책이다. 외부 표준 원문·조직 정책을 검색하는
+RAG는 연결되어 있지 않다. MITRE 출력 필드는 공식 taxonomy 검색·검증을 제공하지 않는다.
+[정책 목록과 문서 추가 요청](policy-documents.ko.md)에 실행 지침·참고 자료·향후 구현을 구분했다.

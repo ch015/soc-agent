@@ -1,6 +1,6 @@
 # SOC를 애플리케이션 코드에서 사용하기
 
-문서 기준: 2026-09-21. [현재 기능과 한계](../../docs/development-status.ko.md) · [전체 앱 연동 예제](../../docs/embedding-agents.ko.md)
+문서 기준: 2026-09-22. [현재 기능과 한계](development-status.ko.md) · [문서 목록](README.md)
 
 `src/index.ts`가 공개 진입점입니다. Node.js 22.18 이상 ESM 환경에서 기존 앱의 코드 의존성으로 연결합니다. Kit CLI·통합 tgz·프로젝트 YAML은 필요하지 않습니다.
 
@@ -62,3 +62,13 @@ pnpm test:all
 
 Zod는 생성된 리소스와 실행 시 스키마의 일치를 위해 검증 버전 `4.4.3`으로 고정했습니다.
 버전을 올릴 때는 코어·서비스 lockfile과 생성 리소스를 함께 검증해야 합니다.
+
+시간 제한이나 취소 시 앱의 모델/connector가 응답하지 않아도 조사는 `incomplete`로 반환합니다.
+늦게 도착한 결과는 반환된 증거에 반영하지 않습니다. 실제 하위 요청의 자원 해제는 앱이
+AbortSignal을 전달해 처리해야 합니다. 클래스 인스턴스의 `createConnector`와 내부 상태도 보존합니다.
+
+## 정책 문서와 업무 규칙
+
+`assessmentGuard`는 앱이 작성한 동기 검증 함수이고 정책 문서 검색기가 아닙니다.
+현재 공개 API에는 `knowledge`/RAG 옵션이 없습니다. [정책 목록과 최초 연결·등록 프롬프트](policy-documents.ko.md)를
+참고하세요. Feedback의 문서 설정을 SOC 옵션으로 그대로 전달하는 방식은 지원하지 않습니다.

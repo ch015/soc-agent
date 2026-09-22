@@ -19,7 +19,7 @@ export const SEVERITY_PRIORITY_MAP: Record<SocSeverity, number> = {
 
 export interface SignalDeduplication {
   /** Check if signalId has been seen before. Returns true if duplicate. */
-  bySignalId(signalId: string): Promise<boolean>;
+  bySignalId(tenantId: string, signalId: string): Promise<boolean>;
 
   /**
    * Check correlation: same subject + rule within 5min window.

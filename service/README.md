@@ -20,3 +20,14 @@ with development dependencies. Docker uses this compiled service distribution.
 A deployment consists of this package.json, its lockfile, and `dist/` (including
 resources and SQL migrations). Redis/PostgreSQL credentials remain application
 configuration. The core library does not install these services.
+
+## Current operations
+
+See the repository-local [service API](../docs/service-api.ko.md) for request formats,
+queue behavior, errors and deployment boundaries, and [development status](../docs/development-status.ko.md)
+for implemented features and validation scope.
+
+Upgrade all gateways to the same admission implementation so both POST routes share
+the tenant row lock. No new database migration is required for the September 22 admission fix.
+A stored job whose queue delivery fails returns 503; retry with the same signal ID or
+`options.dedupKey` as documented. SOC policy-document RAG is not connected.

@@ -20,7 +20,10 @@ export type SocRunResult = Awaited<ReturnType<typeof investigateSignal>>;
 
 /** The application owns model access and backend mapping; the agent chooses its next action. */
 export function createSocAgent(options: SocAgentOptions) {
-  const settings = { ...options, dataSource: { ...options.dataSource }, limits: { ...options.limits },
+  const dataSource: SocDataSource = 'createConnector' in options.dataSource
+    ? { createConnector: options.dataSource.createConnector.bind(options.dataSource) }
+    : { ...options.dataSource };
+  const settings = { ...options, dataSource, limits: { ...options.limits },
     capabilities: options.capabilities ? [...options.capabilities] : undefined };
   return {
     async run(signalInput: SocSignal, execution: { signal?: AbortSignal; context?: string } = {}): Promise<SocRunResult> {

@@ -64,7 +64,9 @@ export const CanonicalRequestSchema = z.object({
   domain: z.literal('soc'),
   source: CanonicalSourceSchema,
   instruction: z.string().min(1),
-  options: z.record(z.string(), z.unknown()).optional(),
+  options: z.record(z.string(), z.unknown()).refine(options => options.dedupKey === undefined
+    || (typeof options.dedupKey === 'string' && options.dedupKey.trim().length > 0 && options.dedupKey.length <= 512),
+    { message: 'dedupKey must be a non-empty string of at most 512 characters', path: ['dedupKey'] }).optional(),
   callback: ResultCallbackSchema,
   metadata: z.record(z.string(), z.unknown()).optional(),
 });

@@ -1,7 +1,7 @@
 /** Tenant authentication middleware and helpers. */
 import type { Context, Next } from 'hono';
 
-import type { PgPool, Tenant } from '../job/store.js';
+import type { PgPool, PgQuery, Tenant } from '../job/store.js';
 import { findTenantByApiKey, findTenantBySlackTeam, countActive, countToday } from '../job/store.js';
 
 export class AuthError extends Error {
@@ -63,7 +63,7 @@ export class QuotaError extends Error {
 }
 
 export async function checkQuota(
-  pool: PgPool,
+  pool: PgQuery,
   tenant: Tenant,
   domain: string,
 ): Promise<void> {

@@ -61,18 +61,22 @@ export async function investigate<T>(input: {
     for (let turn = 0; turn < maxTurns; turn++) {
       signal.throwIfAborted();
       if (run.usage.inputTokens + run.usage.outputTokens >= tokenLimit) throw new Error('investigation token limit reached');
-      await input.beforeTurn?.();
+      if (input.beforeTurn) await abortable(input.beforeTurn, signal);
       signal.throwIfAborted();
       const finishOnly = requestedTools >= maxTools || noProgress >= 2 || turn === maxTurns - 1;
       if (finishOnly) messages.push({ role: 'user', content:
         'Investigation limit reached. Make no more tool calls. Return the supported final assessment now; preserve missing evidence as inconclusive.' });
-      const response = await input.llm.completeTurn({
+      const response = await abortable(() => input.llm.completeTurn({
         system: input.system, messages,
         allowTools: !finishOnly,
         tools: input.tools.map(({ name, description, input_schema }) => ({ name, description, input_schema })),
         signal,
-      });
+      }), signal);
       run.modelCalls++;
+      const usage = response?.usage;
+      if (!usage || [usage.inputTokens, usage.outputTokens, usage.cacheReadTokens ?? 0, usage.cacheWriteTokens ?? 0]
+        .some(value => !Number.isSafeInteger(value) || value < 0)
+        || !Number.isSafeInteger(usage.inputTokens + usage.outputTokens)) throw new Error('invalid model usage receipt');
       run.usage.inputTokens += response.usage.inputTokens;
       run.usage.outputTokens += response.usage.outputTokens;
       for (const key of ['cacheReadTokens', 'cacheWriteTokens'] as const) {
@@ -80,6 +84,8 @@ export async function investigate<T>(input: {
       }
       signal.throwIfAborted();
       const calls = response.content.filter(block => block.type === 'tool_use');
+      if (calls.some(call => typeof call.id !== 'string' || !call.id.trim())
+        || new Set(calls.map(call => call.id)).size !== calls.length) throw new Error('invalid model tool IDs');
       if (calls.length === 0) {
         if (response.stopReason !== 'end_turn') throw new Error(`model stopped without a complete answer: ${response.stopReason}`);
         const text = response.content.filter(block => block.type === 'text').map(block => block.text ?? '').join('');
@@ -147,7 +153,7 @@ export async function investigate<T>(input: {
           signal.throwIfAborted();
           const { tool, args, observation, index } = jobs[nextJob++]!;
           try {
-            const data = await tool.execute(args, signal);
+            const data = await abortable(() => tool.execute(args, signal), signal);
             signal.throwIfAborted();
             const serialized = JSON.stringify(data);
             if (serialized === undefined) throw new Error('tool returned no evidence');
@@ -187,6 +193,17 @@ export async function investigate<T>(input: {
     run.reason = safeError(error);
     return run;
   } finally { clearTimeout(timer); }
+}
+
+/** Stop waiting even when an application adapter does not honor AbortSignal. */
+function abortable<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise<T>((resolve, reject) => {
+    const cancel = () => reject(signal.reason);
+    signal.addEventListener('abort', cancel, { once: true });
+    Promise.resolve().then(() => { signal.throwIfAborted(); return operation(); }).then(resolve, reject)
+      .finally(() => signal.removeEventListener('abort', cancel));
+  });
 }
 
 function bounded(value: number | undefined, fallback: number, minimum: number, maximum: number): number {

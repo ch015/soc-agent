@@ -1,13 +1,13 @@
 /** SOC Event Ingress handler — validates signal, authenticates, emits to gateway. */
 import type { Context } from 'hono';
+import { readJson } from '../../request-validation.js';
 
 import type { PgPool } from '../../job/store.js';
-import { createJob, findTenantById } from '../../job/store.js';
+import { admitSocJob, deliverAdmission, QueueDeliveryError } from '../../job/admission.js';
+import { QuotaError } from '../../auth/tenant.js';
 import type { RedisConnection } from '../../job/queue.js';
-import { enqueue } from '../../job/queue.js';
 import { SocSignalSchema, SEVERITY_PRIORITY_MAP } from './types.js';
 import type { SocSignal } from './types.js';
-import { SignalCorrelation } from './correlation.js';
 import type { CanonicalRequest } from '../../job/types.js';
 
 export interface IngressDeps {
@@ -23,7 +23,6 @@ export interface IngressDeps {
  */
 export function handleSocSignal(deps: IngressDeps) {
   const { pool, redis } = deps;
-  const correlation = new SignalCorrelation(redis);
 
   return async (c: Context) => {
     // 1. Authenticate — API key from Authorization header
@@ -42,7 +41,7 @@ export function handleSocSignal(deps: IngressDeps) {
     }
 
     // 2. Parse and validate signal schema
-    const body = await c.req.json();
+    const body = await readJson(c);
     const parsed = SocSignalSchema.safeParse(body);
     if (!parsed.success) {
       return c.json(
@@ -58,22 +57,10 @@ export function handleSocSignal(deps: IngressDeps) {
       return c.json({ error: 'Signal tenantId does not match authenticated tenant' }, 403);
     }
 
-    // 3. Deduplication — check by signalId
-    const isDuplicate = await correlation.bySignalId(signal.signalId);
-    if (isDuplicate) {
-      return c.json({ ok: true, duplicate: true, signalId: signal.signalId });
-    }
-
-    // 4. Correlation — check for existing job with same subject + rule
-    const existingJobId = await correlation.byCorrelation(signal);
-    if (existingJobId) {
-      return c.json({ ok: true, correlated: true, jobId: existingJobId, signalId: signal.signalId });
-    }
-
-    // 5. Determine priority
+    // 3. Determine priority
     const priority = SEVERITY_PRIORITY_MAP[signal.severity];
 
-    // 6. Create canonical request and job
+    // 4. Build the request for atomic quota checking and job creation
     const canonicalRequest: CanonicalRequest = {
       domain: 'soc',
       source: {
@@ -97,25 +84,21 @@ export function handleSocSignal(deps: IngressDeps) {
       },
     };
 
-    const job = await createJob(pool, {
-      tenantId: tenant.id,
-      domain: 'soc',
-      input: canonicalRequest,
-      callback: canonicalRequest.callback,
-      priority,
-    });
-
-    // 7. Enqueue with priority
-    await enqueue('soc', job, redis, { priority });
-
-    // 8. Mark signalId as seen for dedup + set correlation key for subject+rule window
-    await correlation.markSeen(signal.signalId, job.id);
-    await correlation.setCorrelation(signal, job.id);
-
-    return c.json(
-      { ok: true, jobId: job.id, status: job.status, priority },
-      202,
-    );
+    try {
+      const admission = await admitSocJob(pool, { tenantId: tenant.id, request: canonicalRequest, signal, priority });
+      await deliverAdmission(admission, redis);
+      if (admission.kind !== 'created') {
+        return c.json({ ok: true, [admission.kind]: true, jobId: admission.job.id, signalId: signal.signalId });
+      }
+      return c.json({ ok: true, jobId: admission.job.id, status: admission.job.status, priority }, 202);
+    } catch (error) {
+      if (error instanceof QuotaError) return c.json({ error: error.message }, 429);
+      if (error instanceof QueueDeliveryError) {
+        c.header('Retry-After', '5');
+        return c.json({ error: error.message, jobId: error.jobId, retryable: true }, 503);
+      }
+      throw error;
+    }
   };
 }
 
