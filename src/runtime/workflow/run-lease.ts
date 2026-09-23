@@ -192,7 +192,7 @@ export class PostgresRunLeaseBackend implements RunLeaseBackend {
   async release(lease: RunLease): Promise<void> {
     await this.pool.query(
       `UPDATE nunchi_run_leases
-       SET expires_at = clock_timestamp(), updated_at = clock_timestamp()
+       SET expires_at = clock_timestamp()
        WHERE run_id = $1 AND token = $2 AND fencing_token = $3`,
       [lease.runId, lease.token, lease.fencingToken],
     );

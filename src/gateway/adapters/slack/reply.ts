@@ -29,6 +29,7 @@ export async function postThreadReply(
 
   const response = await fetch(`${SLACK_API_BASE}/chat.postMessage`, {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       Authorization: `Bearer ${botToken}`,
@@ -62,6 +63,7 @@ export async function updateMessage(
 
   const response = await fetch(`${SLACK_API_BASE}/chat.update`, {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       Authorization: `Bearer ${botToken}`,
@@ -86,7 +88,7 @@ export async function sendProgressReply(
 ): Promise<void> {
   const channel = job.callback.channel;
   const threadTs = job.callback.threadTs;
-  if (!channel || !threadTs) return;
+  if (!channel || !threadTs) throw new Error('Slack callback channel and threadTs are required');
 
   const text = `🔄 ${progress.phase}${progress.percent > 0 ? ` (${progress.percent}%)` : ''}${progress.detail ? ` — ${progress.detail}` : ''}`;
   await postThreadReply(botToken, channel, threadTs, text);
@@ -102,7 +104,7 @@ export async function sendResultReply(
 ): Promise<void> {
   const channel = job.callback.channel;
   const threadTs = job.callback.threadTs;
-  if (!channel || !threadTs) return;
+  if (!channel || !threadTs) throw new Error('Slack callback channel and threadTs are required');
 
   let text: string;
 

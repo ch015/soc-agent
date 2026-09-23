@@ -1,3 +1,4 @@
+import type { JobExecution } from '../job/execution-context.js';
 /** Model-directed, read-only SOC investigation with bounded actions. */
 import type { DomainHandler } from './runner.js';
 import type { PgPool } from '../job/store.js';
@@ -134,10 +135,13 @@ export class SocMonitorHandler implements DomainHandler {
     }));
   }
 
-  async process(job: Job, pool: PgPool): Promise<void> {
+  async process(job: Job, pool: PgPool, execution?: JobExecution): Promise<void> {
     const signal = job.input.options?.signal as SocSignal | undefined;
     if (!signal) throw new Error('SOC monitor job missing signal');
     const controller = new AbortController();
+    const cancel = () => controller.abort(execution?.signal.reason);
+    execution?.signal.throwIfAborted();
+    execution?.signal.addEventListener('abort', cancel, { once: true });
     const assertActive = async () => {
       const current = await getJob(pool, job.id);
       if (!current || ['cancelled', 'failed', 'completed'].includes(current.status)) {
@@ -187,7 +191,7 @@ export class SocMonitorHandler implements DomainHandler {
         // A monitor decision is advice, not a scheduled background investigation.
         monitoringScheduled: false,
       });
-    } finally { clearInterval(cancellationPoll); }
+    } finally { clearInterval(cancellationPoll); execution?.signal.removeEventListener('abort', cancel); }
   }
 
   private async sendSlackAlert(signal: SocSignal, analysis: AnalysisResult, signalAbort: AbortSignal): Promise<{ notified: boolean; reason?: string; channel?: string; messageTs?: string }> {
@@ -215,8 +219,7 @@ export class SocMonitorHandler implements DomainHandler {
     const current = await getJob(pool, job.id);
     if (!current || ['completed', 'failed', 'cancelled'].includes(current.status)) return;
     await emitProgress(pool, job.id, { phase: 'complete', percent: 100, detail: '조사 결과 정리 완료' });
-    await transitionJob(pool, current, 'completed', { result });
-    await resultRouter.route({ ...job, status: 'completed', result },
-      { type: 'completed', summary: `SOC: ${result.summary ?? 'done'}` });
+    await transitionJob(pool, current, 'completed', { result,
+      notification: { type: 'completed', summary: `SOC: ${result.summary ?? 'done'}` } });
   }
 }

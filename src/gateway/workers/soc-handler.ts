@@ -1,3 +1,4 @@
+import type { JobExecution } from '../job/execution-context.js';
 /**
  * SOC DomainHandler — the core orchestration for SOC jobs.
  *
@@ -9,7 +10,7 @@ import type { PgPool } from '../job/store.js';
 import { getJob } from '../job/store.js';
 import { transitionJob, emitProgress } from '../job/lifecycle.js';
 import type { Job } from '../job/types.js';
-import { resultRouter } from '../result/router.js';
+import { runSession } from '../../runtime/session.js';
 import { executeSocSnapshot, redactionTrustFromEnv } from '../../runtime/soc-execution.js';
 import { SocMissionSchema } from '../../runtime/contracts/soc-schemas.js';
 import type { SocSignal, AdvisoryAction } from '../adapters/soc/types.js';
@@ -48,7 +49,8 @@ export class SocHandler implements DomainHandler {
     this.playbookExecutor = opts?.playbookExecutor ?? this.buildDefaultExecutor();
   }
 
-  async process(job: Job, pool: PgPool): Promise<void> {
+  async process(job: Job, pool: PgPool, execution?: JobExecution): Promise<void> {
+    execution?.signal.throwIfAborted();
     const signal = job.input.options?.signal as SocSignal | undefined;
     if (!signal) {
       throw new Error('SOC job missing signal in input.options');
@@ -73,7 +75,14 @@ export class SocHandler implements DomainHandler {
         engagementId: `soc-${job.id}-${job.attempts}`,
         model: process.env.DEFAULT_MODEL,
         reviewModel: process.env.DEFAULT_REVIEW_MODEL,
-      }, { redactionTrust: redactionTrustFromEnv() });
+      }, { redactionTrust: redactionTrustFromEnv(), sessionRunner: async spec => {
+        const controller = new AbortController();
+        const abort = () => controller.abort(execution?.signal.reason);
+        execution?.signal.throwIfAborted();
+        execution?.signal.addEventListener('abort', abort, { once: true });
+        try { return await runSession({ ...spec, abortController: controller }); }
+        finally { execution?.signal.removeEventListener('abort', abort); }
+      } });
       // v1 results are reviewed advisory drafts. Their advice does not authorize a playbook.
       const analysisResult: Record<string, unknown> = {
         status: mission.status,
@@ -108,6 +117,7 @@ export class SocHandler implements DomainHandler {
           const refetched = await getJob(pool, job.id);
           if (refetched && refetched.status === 'running') {
             await transitionJob(pool, refetched, 'action_pending' as Job['status'], {
+              notification: { type: 'progress', phase: 'approval_pending', percent: 80 },
               progress: {
                 ...PHASES.approval,
                 pendingActions: manualRequired.map((r) => r.actionKey),
@@ -116,13 +126,6 @@ export class SocHandler implements DomainHandler {
               },
             });
           }
-
-          // Route notification for approval required
-          await resultRouter.route(job, {
-            type: 'progress',
-            phase: 'approval_pending',
-            percent: 80,
-          });
 
           return; // Wait for manual approval via POST /api/v1/jobs/:id/approve
         }
@@ -167,6 +170,7 @@ export class SocHandler implements DomainHandler {
       const refetched = await getJob(pool, job.id);
       if (refetched && (refetched.status === 'running' || refetched.status === ('action_executing' as Job['status']))) {
         await transitionJob(pool, refetched, 'completed', {
+          notification: { type: 'completed', summary: `SOC ${missionType} ${mission.status} — ${signal.severity} signal from ${signal.source}` },
           result: {
             analysisResult,
             actionsExecuted: advisoryActions.length,
@@ -175,19 +179,12 @@ export class SocHandler implements DomainHandler {
         });
       }
 
-      // Route final result
-      await resultRouter.route(
-        { ...job, status: 'completed', result: analysisResult } as Job,
-        {
-          type: 'completed',
-          summary: `SOC ${missionType} ${mission.status} — ${signal.severity} signal from ${signal.source}`,
-        },
-      );
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const refetched = await getJob(pool, job.id);
       if (refetched && !['completed', 'failed', 'cancelled'].includes(refetched.status)) {
         await transitionJob(pool, refetched, 'failed', {
+          notification: { type: 'failed', error: errorMessage },
           error: {
             message: errorMessage,
             stack: err instanceof Error ? err.stack : undefined,
@@ -196,11 +193,6 @@ export class SocHandler implements DomainHandler {
         });
       }
 
-      await resultRouter.route(
-        { ...job, status: 'failed' } as Job,
-        { type: 'failed', error: errorMessage },
-      );
-
       throw err;
     }
   }
@@ -208,8 +200,9 @@ export class SocHandler implements DomainHandler {
   /**
    * Resume after manual approval.
    */
-  async resume(job: Job, input: unknown, pool: PgPool): Promise<void> {
+  async resume(job: Job, input: unknown, pool: PgPool, execution?: JobExecution): Promise<void> {
     const approval = input as { decision: 'approve' | 'deny'; rationale?: string };
+    execution?.signal.throwIfAborted();
     const signal = job.input.options?.signal as SocSignal | undefined;
     if (!signal) throw new Error('SOC job missing signal');
 
@@ -218,6 +211,7 @@ export class SocHandler implements DomainHandler {
       if (refetched) {
         await transitionJob(pool, refetched, 'completed', {
           result: { denied: true, rationale: approval.rationale },
+          notification: { type: 'completed', summary: 'SOC action denied' },
         });
       }
       return;
@@ -225,7 +219,7 @@ export class SocHandler implements DomainHandler {
 
     // Transition to action_executing
     const refetched = await getJob(pool, job.id);
-    if (refetched) {
+    if (refetched && refetched.status !== 'action_executing') {
       await transitionJob(pool, refetched, 'action_executing' as Job['status']);
     }
 
@@ -260,6 +254,7 @@ export class SocHandler implements DomainHandler {
     if (final && final.status !== 'completed') {
       await transitionJob(pool, final, 'completed', {
         result: { approved: true, rationale: approval.rationale },
+        notification: { type: 'completed', summary: 'SOC approved action completed' },
       });
     }
   }

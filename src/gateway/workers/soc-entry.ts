@@ -1,5 +1,6 @@
 /** SOC BullMQ worker entry — priority queue, per-domain config. */
 import Redis from 'ioredis';
+import { startDeliveryMaintenance } from '../job/outbox.js';
 
 import { loadConfig } from '../config.js';
 import { createPool } from '../job/store.js';
@@ -28,17 +29,20 @@ const monitor = new SocMonitorHandler();
 const legacy = new SocHandler();
 const handler: DomainHandler = {
   domain: 'soc',
-  process: (job, pool) => (!useV2 || job.input.options?.preparedSnapshot ? legacy : monitor).process(job, pool),
-  resume: (job, input, pool) => legacy.resume(job, input, pool),
+  process: (job, pool, execution) => (!useV2 || job.input.options?.preparedSnapshot ? legacy : monitor).process(job, pool, execution),
+  resume: (job, input, pool, execution) => legacy.resume(job, input, pool, execution),
 };
 const queueConfig = QUEUE_CONFIGS.soc;
 const worker = createDomainWorker(handler, redis, pool, { queueConfig });
 
 console.log(`[soc-worker] Started (${useV2 ? 'v2-monitor' : 'v1-legacy'}). Queue: secops-soc, concurrency: ${queueConfig.concurrency}, timeout: ${queueConfig.timeout}ms`);
 
+const stopMaintenance = startDeliveryMaintenance(pool, redis, 'soc');
+
 // Graceful shutdown
 const shutdown = async () => {
   console.log('[soc-worker] Shutting down...');
+  await stopMaintenance();
   await worker.close();
   await redis.quit();
   await pool.end();

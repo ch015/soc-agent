@@ -1,7 +1,10 @@
 /** Job lifecycle state transition validation and event emission. */
 import type { PgPool } from './store.js';
 import { updateJob, insertJobEvent } from './store.js';
-import type { Job, JobStatus } from './types.js';
+import { currentJobExecution } from './execution-context.js';
+import { transaction } from './transaction.js';
+import { saveExecutionDelivery, saveCallbackDelivery } from './delivery-store.js';
+import type { Job, JobStatus, ResultPayload } from './types.js';
 
 /**
  * Valid transitions map — exact per design §6.2.
@@ -37,7 +40,11 @@ export function canTransition(from: JobStatus, to: JobStatus): boolean {
   return VALID_TRANSITIONS[from].includes(to);
 }
 
+export class JobConflictError extends Error { constructor() { super('Job state changed; reload before retrying'); this.name = 'JobConflictError'; } }
+
 export interface TransitionOptions {
+  deliveryId?: string;
+  notification?: ResultPayload;
   progress?: Record<string, unknown> | null;
   result?: Record<string, unknown> | null;
   error?: Record<string, unknown> | null;
@@ -54,6 +61,7 @@ export async function transitionJob(
   to: JobStatus,
   opts: TransitionOptions = {},
 ): Promise<Job> {
+  currentJobExecution(job.id);
   if (!canTransition(job.status, to)) {
     throw new InvalidTransitionError(job.status, to);
   }
@@ -61,6 +69,10 @@ export async function transitionJob(
   const updateFields: Parameters<typeof updateJob>[2] = {
     status: to,
   };
+
+  if (opts.deliveryId !== undefined) updateFields.deliveryId = opts.deliveryId;
+  if (!['running', 'action_executing'].includes(to)) updateFields.executionToken = null;
+  if (to === 'queued' || to === 'running') updateFields.completedAt = null;
 
   if (opts.progress !== undefined) updateFields.progress = opts.progress;
   if (opts.result !== undefined) updateFields.result = opts.result;
@@ -76,23 +88,27 @@ export async function transitionJob(
     updateFields.completedAt = new Date();
   }
 
-  const updated = await updateJob(pool, job.id, updateFields);
-  if (!updated) throw new Error(`Job ${job.id} not found during transition`);
+  return transaction(pool, async client => {
+    const updated = await updateJob(client, job.id, updateFields, job);
+    if (!updated) throw new JobConflictError();
 
-  // Emit event
-  const eventType = mapStatusToEventType(to);
-  const eventPayload: Record<string, unknown> = {
-    status: to,
-    updatedAt: updated.updatedAt.toISOString(),
-  };
-  if (opts.progress) eventPayload.progress = opts.progress;
-  if (opts.result) eventPayload.result = opts.result;
-  if (opts.error) eventPayload.error = opts.error;
-  if (opts.pendingInput) eventPayload.pendingInput = opts.pendingInput;
+    // Emit event
+    const eventType = mapStatusToEventType(to);
+    const eventPayload: Record<string, unknown> = {
+      status: to,
+      updatedAt: updated.updatedAt.toISOString(),
+    };
+    if (opts.progress) eventPayload.progress = opts.progress;
+    if (opts.result) eventPayload.result = opts.result;
+    if (opts.error) eventPayload.error = opts.error;
+    if (opts.pendingInput) eventPayload.pendingInput = opts.pendingInput;
 
-  await insertJobEvent(pool, job.id, eventType, eventPayload);
+    await insertJobEvent(client, job.id, eventType, eventPayload);
+    if (opts.deliveryId) await saveExecutionDelivery(client, updated, opts.deliveryId);
+    if (opts.notification) await saveCallbackDelivery(client, updated, opts.notification);
 
-  return updated;
+    return updated;
+  });
 }
 
 /**
@@ -103,7 +119,7 @@ export async function emitProgress(
   jobId: string,
   progress: { phase: string; percent: number; detail?: string },
 ): Promise<void> {
-  await updateJob(pool, jobId, { progress });
+  if (!await updateJob(pool, jobId, { progress })) throw new JobConflictError();
   await insertJobEvent(pool, jobId, 'progress', progress);
 }
 

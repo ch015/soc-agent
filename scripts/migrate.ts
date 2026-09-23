@@ -12,7 +12,7 @@ try {
     await client.query('BEGIN');
     await client.query("SELECT pg_advisory_xact_lock(hashtext('secops-soc-schema'))");
     await client.query('CREATE TABLE IF NOT EXISTS soc_schema_migrations (name TEXT PRIMARY KEY, sha256 TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
-    for (const name of ['src/gateway/migrations/001-initial.sql', 'src/gateway/migrations/002-soc.sql', 'src/runtime/workflow/postgres-run-state.sql']) {
+    for (const name of ['src/gateway/migrations/001-initial.sql', 'src/gateway/migrations/002-soc.sql', 'src/gateway/migrations/003-workflow-deliveries.sql', 'src/runtime/workflow/postgres-run-state.sql']) {
       const sql = readFileSync(resolve(import.meta.dirname, '..', name), 'utf8');
       const sha256 = createHash('sha256').update(sql).digest('hex');
       const { rows } = await client.query<{ sha256: string }>('SELECT sha256 FROM soc_schema_migrations WHERE name = $1', [name]);

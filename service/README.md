@@ -10,6 +10,7 @@ pnpm install --frozen-lockfile
 pnpm build:service
 cd service
 pnpm install --prod --frozen-lockfile
+pnpm db:migrate
 pnpm start
 # Or: pnpm worker
 ```
@@ -31,3 +32,8 @@ Upgrade all gateways to the same admission implementation so both POST routes sh
 the tenant row lock. No new database migration is required for the September 22 admission fix.
 A stored job whose queue delivery fails returns 503; retry with the same signal ID or
 `options.dedupKey` as documented. SOC policy-document RAG is not connected.
+
+The September 23 workflow update requires gateway migration `003-workflow-deliveries.sql`.
+Stop old gateways/workers, run `pnpm db:migrate`, then start the updated processes.
+Do not mix old workers with the new versioned state transitions. See
+[workflow recovery](../docs/workflow-recovery.ko.md) for delivery and recovery limits.

@@ -1,4 +1,6 @@
 /** Result router — dispatches results by callback.type (slack_thread, webhook, poll, pagerduty, incident). */
+import { AsyncLocalStorage } from 'node:async_hooks';
+const deliveryContext = new AsyncLocalStorage<string>();
 import type { Job, ResultPayload } from '../job/types.js';
 
 /**
@@ -20,14 +22,13 @@ export class ResultRouter {
     this.handlers.set(type, handler);
   }
 
-  async route(job: Job, payload: ResultPayload): Promise<void> {
+  async route(job: Job, payload: ResultPayload, deliveryId?: string): Promise<void> {
     const callbackType = job.callback.type;
     const handler = this.handlers.get(callbackType);
     if (!handler) {
-      console.warn(`[ResultRouter] No handler registered for callback type: ${callbackType}`);
-      return;
+      throw new Error(`No result handler registered: ${callbackType}`);
     }
-    await handler.handle(job, payload);
+    await deliveryContext.run(deliveryId ?? '', () => handler.handle(job, payload));
   }
 }
 
@@ -56,15 +57,16 @@ export class WebhookResultHandler implements ResultHandler {
   async handle(job: Job, payload: ResultPayload): Promise<void> {
     const url = job.callback.url;
     if (!url) {
-      console.warn(`[WebhookResultHandler] No URL in callback for job ${job.id}`);
-      return;
+      throw new Error(`No webhook URL configured for job ${job.id}`);
     }
 
     const response = await fetch(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: {
         'Content-Type': 'application/json',
         ...job.callback.headers,
+        ...(deliveryContext.getStore() ? { 'Idempotency-Key': deliveryContext.getStore()! } : {}),
       },
       body: JSON.stringify({
         jobId: job.id,
@@ -74,9 +76,7 @@ export class WebhookResultHandler implements ResultHandler {
     });
 
     if (!response.ok) {
-      console.error(
-        `[WebhookResultHandler] Callback failed for job ${job.id}: ${response.status}`,
-      );
+      throw new Error(`Callback HTTP ${response.status}`);
     }
   }
 }
@@ -105,8 +105,7 @@ export class PagerDutyResultHandler implements ResultHandler {
   async handle(job: Job, payload: ResultPayload): Promise<void> {
     const routingKey = process.env['PAGERDUTY_ROUTING_KEY'];
     if (!routingKey) {
-      console.warn(`[PagerDutyResultHandler] No PAGERDUTY_ROUTING_KEY configured for job ${job.id}`);
-      return;
+      throw new Error(`No PAGERDUTY_ROUTING_KEY configured for job ${job.id}`);
     }
 
     const severity = payload.type === 'failed' ? 'critical' : 'warning';
@@ -128,12 +127,13 @@ export class PagerDutyResultHandler implements ResultHandler {
 
     const response = await fetch('https://events.pagerduty.com/v2/enqueue', {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
     });
 
     if (!response.ok) {
-      console.error(`[PagerDutyResultHandler] Failed for job ${job.id}: ${response.status}`);
+      throw new Error(`PagerDuty HTTP ${response.status}`);
     }
   }
 }
@@ -148,12 +148,12 @@ export class IncidentResultHandler implements ResultHandler {
     // Incident handling delegates to the webhook mechanism with incident-specific formatting.
     const incidentUrl = process.env['INCIDENT_WEBHOOK_URL'];
     if (!incidentUrl) {
-      console.warn(`[IncidentResultHandler] No INCIDENT_WEBHOOK_URL configured for job ${job.id}`);
-      return;
+      throw new Error(`No INCIDENT_WEBHOOK_URL configured for job ${job.id}`);
     }
 
     const response = await fetch(incidentUrl, {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         incidentType: 'soc_incident',
@@ -168,7 +168,7 @@ export class IncidentResultHandler implements ResultHandler {
     });
 
     if (!response.ok) {
-      console.error(`[IncidentResultHandler] Failed for job ${job.id}: ${response.status}`);
+      throw new Error(`Incident HTTP ${response.status}`);
     }
   }
 }

@@ -8,23 +8,27 @@ export { getQueueConfig } from './queue-config.js';
 
 export type RedisConnection = Redis;
 
-const queues = new Map<string, Queue>();
+let byConnection = new WeakMap<RedisConnection, Map<string, Queue>>();
+const queues = new Set<Queue>();
 
 function getQueueName(domain: DomainType): string {
   return `secops-${domain}`;
 }
 
-function getOrCreateQueue(domain: DomainType, connection: RedisConnection): Queue {
+export function getOrCreateQueue(domain: DomainType, connection: RedisConnection): Queue {
   const name = getQueueName(domain);
-  let queue = queues.get(name);
+  let managed = byConnection.get(connection);
+  if (!managed) { managed = new Map(); byConnection.set(connection, managed); }
+  let queue = managed.get(name);
   if (!queue) {
     queue = new Queue(name, { connection });
-    queues.set(name, queue);
+    managed.set(name, queue); queues.add(queue);
   }
   return queue;
 }
 
 export interface EnqueueOptions {
+  deliveryId?: string;
   priority?: number;
   delay?: number;
   attempts?: number;
@@ -47,7 +51,7 @@ export async function enqueue(
     `${domain}-job`,
     { jobId: job.id, tenantId: job.tenantId, domain: job.domain },
     {
-      jobId: job.id,
+      jobId: opts.deliveryId ?? job.deliveryId ?? job.id,
       priority: opts.priority ?? (config.priority ? job.priority : undefined),
       delay: opts.delay,
       attempts: opts.attempts ?? config.retry.attempts,
@@ -65,5 +69,5 @@ export async function enqueue(
 export async function closeAllQueues(): Promise<void> {
   const all = Array.from(queues.values());
   await Promise.all(all.map((q) => q.close()));
-  queues.clear();
+  queues.clear(); byConnection = new WeakMap();
 }

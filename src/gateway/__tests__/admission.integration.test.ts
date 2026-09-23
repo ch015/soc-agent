@@ -35,7 +35,7 @@ async function countJobs() { return Number((await pools[0]!.query('SELECT count(
 describe.skipIf(!databaseUrl)('atomic SOC admission with real PostgreSQL', () => {
   beforeAll(async () => {
     await admin!.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ['001-initial.sql', '002-soc.sql']) {
+    for (const name of ['001-initial.sql', '002-soc.sql', '003-workflow-deliveries.sql']) {
       await pools[0]!.query(readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'));
     }
   });

@@ -81,6 +81,9 @@ export interface CanonicalRequest {
 }
 
 export interface Job {
+  version?: number;
+  executionToken?: string | null;
+  deliveryId?: string | null;
   id: string;
   tenantId: string;
   domain: DomainType;

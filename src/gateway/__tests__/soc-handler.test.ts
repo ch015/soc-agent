@@ -235,13 +235,13 @@ describe('SOC Handler: Result Routing', () => {
     expect(received[0]!.payload.error).toContain('ESCALATION');
   });
 
-  it('handles missing handler gracefully', async () => {
+  it('keeps a missing callback handler retryable', async () => {
     const router = new ResultRouter();
     const job = makeSocJob({ callback: { type: 'incident' } });
 
     await expect(
       router.route(job, { type: 'completed', summary: 'Done' }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('No result handler');
   });
 });
 

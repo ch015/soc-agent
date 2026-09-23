@@ -14,7 +14,6 @@ import {
   type Tenant,
 } from './job/store.js';
 import { listAuditEvents } from './approval/audit.js';
-import { enqueue } from './job/queue.js';
 import { transitionJob } from './job/lifecycle.js';
 import { handleJobStream } from './stream/sse.js';
 import { CanonicalRequestSchema, type CanonicalRequest, type JobStatus } from './job/types.js';
@@ -97,9 +96,8 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
     }
 
     const input = await readJson(c);
-    // Transition back to running will happen in the worker; re-enqueue.
-    await transitionJob(pool, job, 'running', { pendingInput: input as Record<string, unknown> });
-    await enqueue(job.domain, { ...job, status: 'running', pendingInput: input as Record<string, unknown> }, redis);
+    await transitionJob(pool, job, 'running', { pendingInput: input as Record<string, unknown>,
+      deliveryId: `${job.id}-input-${job.version ?? 0}` });
     return c.json({ status: 'running' });
   });
 
@@ -172,14 +170,13 @@ export function registerRoutes(app: Hono, pool: PgPool, redis: RedisConnection):
     if (body.decision === 'deny') {
       await transitionJob(pool, job, 'completed', {
         result: { denied: true, rationale: body.rationale },
+        notification: { type: 'completed', summary: 'SOC action denied' },
       });
       return c.json({ status: 'denied' });
     }
 
-    // Transition to running so the worker re-processes with approval
-    await transitionJob(pool, job, 'action_executing');
-    const { enqueue: enqueueJob } = await import('./job/queue.js');
-    await enqueueJob('soc', { ...job, status: 'action_executing', pendingInput: body as Record<string, unknown> } as typeof job, redis);
+    await transitionJob(pool, job, 'action_executing', { pendingInput: body,
+      deliveryId: `${job.id}-approval-${job.version ?? 0}` });
     return c.json({ status: 'approved' });
   });
   app.route('/api/v1/jobs', approveRoute);

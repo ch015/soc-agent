@@ -1,5 +1,6 @@
 /** PostgreSQL CRUD for jobs + job_events tables. */
 import pg from 'pg';
+import { currentJobExecution } from './execution-context.js';
 
 import type { Job, JobEvent, JobStatus, CanonicalRequest, ResultCallback } from './types.js';
 
@@ -10,7 +11,7 @@ export type PgPool = InstanceType<typeof Pool>;
 export type PgQuery = Pick<PgPool, 'query'>;
 
 export function createPool(connectionString: string): PgPool {
-  return new Pool({ connectionString, max: 20 });
+  return new Pool({ connectionString, max: 20, connectionTimeoutMillis: 5000, statement_timeout: 5000, query_timeout: 6000 });
 }
 
 // ─── Job CRUD ───────────────────────────────────────────────────────────────
@@ -26,9 +27,13 @@ export interface CreateJobParams {
 export async function createJob(pool: PgQuery, params: CreateJobParams): Promise<Job> {
   const { tenantId, domain, input, callback, priority = 3 } = params;
   const { rows } = await pool.query(
-    `INSERT INTO jobs (tenant_id, domain, input, callback, priority, status)
-     VALUES ($1, $2, $3, $4, $5, 'queued')
-     RETURNING *`,
+    `WITH created AS (
+       INSERT INTO jobs (tenant_id, domain, input, callback, priority, status)
+       VALUES ($1, $2, $3, $4, $5, 'queued') RETURNING *
+     ), intent AS (
+       INSERT INTO gateway_outbox(id,job_id,kind,payload)
+       SELECT 'execution:' || id::text,id,'execution',jsonb_build_object('deliveryId',id::text) FROM created
+     ) SELECT * FROM created`,
     [tenantId, domain, JSON.stringify(input), JSON.stringify(callback), priority],
   );
   return mapRow(rows[0]);
@@ -40,7 +45,7 @@ export async function getJob(pool: PgQuery, jobId: string): Promise<Job | null> 
 }
 
 export async function listJobs(
-  pool: PgPool,
+  pool: PgQuery,
   tenantId: string,
   opts: { limit?: number; offset?: number; status?: JobStatus; domain?: string } = {},
 ): Promise<Job[]> {
@@ -70,11 +75,14 @@ export async function listJobs(
 }
 
 export async function updateJob(
-  pool: PgPool,
+  pool: PgQuery,
   jobId: string,
-  fields: Partial<Pick<Job, 'status' | 'progress' | 'result' | 'error' | 'pendingInput' | 'costUsd' | 'attempts' | 'startedAt' | 'completedAt'>>,
+  fields: Partial<Pick<Job, 'status' | 'progress' | 'result' | 'error' | 'pendingInput' | 'costUsd' | 'attempts' | 'startedAt' | 'completedAt' | 'executionToken' | 'deliveryId'>>,
+  expected?: Pick<Job, 'status' | 'version'>,
 ): Promise<Job | null> {
+  const execution = currentJobExecution(jobId);
   const sets: string[] = ['updated_at = now()'];
+  if (fields.status !== undefined || fields.executionToken !== undefined) sets.push('version = version + 1');
   const params: unknown[] = [];
   let idx = 1;
 
@@ -115,9 +123,15 @@ export async function updateJob(
     params.push(fields.completedAt);
   }
 
+  for (const [key, column] of [['executionToken', 'execution_token'], ['deliveryId', 'delivery_id']] as const) {
+    if (fields[key] !== undefined) { sets.push(`${column} = $${idx++}`); params.push(fields[key]); }
+  }
   params.push(jobId);
+  const conditions = [`id = $${idx++}`];
+  if (expected) { conditions.push(`status = $${idx++}`, `version = $${idx++}`); params.push(expected.status, expected.version ?? 0); }
+  if (execution) { conditions.push(`execution_token = $${idx++}`); params.push(execution.token); }
   const { rows } = await pool.query(
-    `UPDATE jobs SET ${sets.join(', ')} WHERE id = $${idx} RETURNING *`,
+    `UPDATE jobs SET ${sets.join(', ')} WHERE ${conditions.join(' AND ')} RETURNING *`,
     params,
   );
   return rows.length ? mapRow(rows[0]) : null;
@@ -148,7 +162,7 @@ export interface FindByCallbackOpts {
   status: JobStatus;
 }
 
-export async function findByCallback(pool: PgPool, opts: FindByCallbackOpts): Promise<Job | null> {
+export async function findByCallback(pool: PgQuery, opts: FindByCallbackOpts): Promise<Job | null> {
   const { rows } = await pool.query(
     `SELECT * FROM jobs
      WHERE status = $1
@@ -164,7 +178,7 @@ export async function findByCallback(pool: PgPool, opts: FindByCallbackOpts): Pr
 // ─── Job Events ─────────────────────────────────────────────────────────────
 
 export async function insertJobEvent(
-  pool: PgPool,
+  pool: PgQuery,
   jobId: string,
   eventType: string,
   payload: Record<string, unknown>,
@@ -179,7 +193,7 @@ export async function insertJobEvent(
 }
 
 export async function getJobEventsSince(
-  pool: PgPool,
+  pool: PgQuery,
   jobId: string,
   afterId: number = 0,
 ): Promise<JobEvent[]> {
@@ -204,7 +218,7 @@ export interface Tenant {
   createdAt: Date;
 }
 
-export async function findTenantByApiKey(pool: PgPool, apiKey: string): Promise<Tenant | null> {
+export async function findTenantByApiKey(pool: PgQuery, apiKey: string): Promise<Tenant | null> {
   const { rows } = await pool.query(
     `SELECT * FROM tenants WHERE api_key = $1`,
     [apiKey],
@@ -212,7 +226,7 @@ export async function findTenantByApiKey(pool: PgPool, apiKey: string): Promise<
   return rows.length ? mapTenantRow(rows[0]) : null;
 }
 
-export async function findTenantBySlackTeam(pool: PgPool, teamId: string): Promise<Tenant | null> {
+export async function findTenantBySlackTeam(pool: PgQuery, teamId: string): Promise<Tenant | null> {
   const { rows } = await pool.query(
     `SELECT * FROM tenants WHERE slack_team_id = $1`,
     [teamId],
@@ -242,7 +256,7 @@ export interface InsertApprovalEventParams {
   evidence: Record<string, unknown>;
 }
 
-export async function insertApprovalEvent(pool: PgPool, params: InsertApprovalEventParams): Promise<Record<string, unknown>> {
+export async function insertApprovalEvent(pool: PgQuery, params: InsertApprovalEventParams): Promise<Record<string, unknown>> {
   const { rows } = await pool.query(
     `INSERT INTO approval_events (job_id, action_key, action_type, decision, decided_by, decided_at, policy_version, rationale, evidence)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -257,7 +271,7 @@ export async function insertApprovalEvent(pool: PgPool, params: InsertApprovalEv
 }
 
 export async function listApprovalEvents(
-  pool: PgPool,
+  pool: PgQuery,
   opts: { jobId?: string; limit?: number; offset?: number } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const conditions: string[] = [];
@@ -291,7 +305,7 @@ export interface InsertPlaybookExecutionParams {
   totalAffectedEntities: number;
 }
 
-export async function insertPlaybookExecution(pool: PgPool, params: InsertPlaybookExecutionParams): Promise<Record<string, unknown>> {
+export async function insertPlaybookExecution(pool: PgQuery, params: InsertPlaybookExecutionParams): Promise<Record<string, unknown>> {
   const { rows } = await pool.query(
     `INSERT INTO playbook_executions (job_id, playbook_id, status, steps, total_affected_entities)
      VALUES ($1, $2, $3, $4, $5)
@@ -301,7 +315,7 @@ export async function insertPlaybookExecution(pool: PgPool, params: InsertPlaybo
   return rows[0] as Record<string, unknown>;
 }
 
-export async function getPlaybookExecutions(pool: PgPool, jobId: string): Promise<Array<Record<string, unknown>>> {
+export async function getPlaybookExecutions(pool: PgQuery, jobId: string): Promise<Array<Record<string, unknown>>> {
   const { rows } = await pool.query(
     `SELECT * FROM playbook_executions WHERE job_id = $1 ORDER BY created_at DESC`,
     [jobId],
@@ -316,7 +330,7 @@ export async function getPlaybookExecutions(pool: PgPool, jobId: string): Promis
  * Used for correlation (to merge repeated signals into existing analysis jobs).
  */
 export async function findActiveSocJobBySignal(
-  pool: PgPool,
+  pool: PgQuery,
   tenantId: string,
   signalId: string,
 ): Promise<Job | null> {
@@ -336,6 +350,9 @@ export async function findActiveSocJobBySignal(
 
 function mapRow(row: Record<string, unknown>): Job {
   return {
+    version: Number(row.version ?? 0),
+    executionToken: row.execution_token as string | null,
+    deliveryId: row.delivery_id as string | null,
     id: row.id as string,
     tenantId: row.tenant_id as string,
     domain: row.domain as Job['domain'],
