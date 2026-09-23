@@ -1,6 +1,6 @@
 # SOC 개발 현황
 
-기준: 2026-09-22. [프로젝트 README](../README.md) · [문서 목록](README.md)
+기준: 2026-09-23. [프로젝트 README](../README.md) · [문서 목록](README.md)
 
 ## 구현된 기능
 
@@ -11,7 +11,7 @@
 | v1 | 서명된 prepared snapshot의 report/investigation, 독립 검증 후 내부 draft 또는 hold |
 | 데이터 조회 | signal/rule/fields/events/TI/identity/entity/graph의 8개 읽기 도구 |
 | 조사 제어 | 기본 8턴·12도구 요청·120초·60,000토큰. 독립 조회 기본 2개 병렬, 중복 재사용, 시간 초과·취소 처리 |
-| 서비스 | gateway·PostgreSQL·Redis·worker·Compose, 테넌트 인증·할당량·지속되는 중복 판정, escalation Slack 전달 |
+| 서비스 | gateway·PostgreSQL·Redis·worker·Compose, 테넌트 인증·할당량·중복 판정, 실행/콜백 outbox·deadline·취소·stalled 정리, 별도 escalation Slack |
 | 정책 참고 | 내부 조사·판정·v1 계약 지침. MITRE 전술 문자열 출력. 외부 정책 문서 RAG는 미연결 |
 
 실행 옵션과 모델·connector의 책임은 [코드 연동](embedding.md), API 형식과 데이터 한도는
@@ -27,7 +27,7 @@
 - generic `options.dedupKey`의 중첩 JSON 경로를 수정했다. DB 커밋 후에만 큐로 전달하고,
   Redis 실패는 503으로 노출하며 동일 식별자 재시도로 기존 queued job의 전달을 복구한다.
 
-이 변경의 DB migration은 필요하지 않다. 모든 gateway를 새 admission 코드로 전환해야 같은 잠금
+9월 22일 admission 변경만으로는 migration이 필요하지 않았지만, 현재 9월 23일 버전에는 `003-workflow-deliveries.sql`이 필요하다. 모든 gateway를 새 admission 코드로 전환해야 같은 잠금
 규약을 따른다. 운영 배포를 수행했다는 의미는 아니다. [서비스 API와 재시도 조건](service-api.ko.md)을 확인한다.
 
 ## 검증 기록과 남은 범위
@@ -43,10 +43,16 @@
 `eval:soc`은 prepared snapshot 고정 평가이며 v2 실모델 품질 평가가 아니다.
 job `completed`만으로 조사 성공을 판단하지 않고 `result.investigationStatus`, `phase`, `llmUsed`, `notified`를 확인한다.
 `monitor`는 권고이고 재조사 예약이 아니다. 기본 v2에 자동 차단·격리·정책 RAG·벡터 DB는 연결되지 않았다.
-호출자의 재시도 없이 미전달 job을 자동 재전송하는 outbox도 제공하지 않는다.
+미전달 실행/일반 콜백은 Gateway 또는 worker의 outbox dispatcher가 자동 재전송한다. 별도 Monitor Slack escalation은 best-effort이며 `notified`/실패 사유를 결과에 남긴다. ACK 유실 시 중복 콜백이 가능하고 Redis 전체 유실까지 자동 복구하지 않는다.
 
 ## 문서 관리
 
-현재 안내는 README, 이 문서, embedding/data-connectors/agent-autonomy/service-api/policy-documents다.
+현재 안내는 README, 이 문서, embedding/data-connectors/agent-autonomy/service-api/policy-documents/workflow-recovery다.
 번호가 붙은 과거 설계·포팅 기록의 완료 표시와 테스트 수는 당시 기준으로 보존한다.
 계약에 포함된 역할·method·skill·schema는 실행 리소스이므로 안내 문서처럼 일괄 수정하지 않는다.
+
+## 2026-09-23 워크플로우 검증
+
+상태와 실행/콜백 요청을 원자적으로 저장하고, version·실행 token으로 취소/인계된 worker의 늦은 쓰기를 거부한다. 기본 10분 worker deadline과 SDK/조사 취소, 반복 stalled 종료의 DB 상태 정리, 승인 입력 저장·고유 전달 ID를 추가했다. 독립 lease 스키마의 해제 오류도 수정했다.
+
+일반 테스트 359개, 실제 PostgreSQL 23개, 실제 DB/Redis workflow 9개와 타입·계약·고정 평가·라이브러리/서비스 빌드·별도 core 설치를 통과했다. [workflow 통합 검사](../src/gateway/__tests__/workflow-recovery.integration.test.ts)와 [독립 lease 검사](../src/runtime/__tests__/standalone-lease.integration.test.ts)가 회귀 근거다. 실제 모델·운영 데이터는 호출하지 않았다. 배포 전 [migration과 복구 절차](workflow-recovery.ko.md)를 따른다.

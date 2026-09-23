@@ -1,7 +1,7 @@
 # SOC domain port and independent review record
 
 > **이전 기록 — 2026-09-18 현행화 메모.** 본문의 설계·명령·경로·수치와 완료 표시는 작성 당시 기록이며 현재 지원 범위를 보장하지 않는다.
-> 현재 상태: [개발 현황](../../docs/development-status.ko.md) · [현재 실행 안내](../README.md)
+> 현재 상태: [개발 현황](development-status.ko.md) · [현재 실행 안내](../README.md)
 
 - Date: 2026-08-04
 - Contracts: `nunchi.soc.report@1.0.0`, `nunchi.soc.investigation@1.0.0`

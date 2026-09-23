@@ -1,7 +1,7 @@
 # Phase 3: SOC Event Ingress + 승인 게이트 + 플레이북 설계
 
 > **이전 기록 — 2026-09-18 현행화 메모.** 통합 플랫폼 시점의 설계·운영 기록이다. 현재 OffSec는 모듈/CLI, Feedback와 SOC는 각각 분리된 gateway를 사용한다. 당시 라우트·배포 수량·비용 예상은 현재 운영 보장이 아니다.
-> 현재 상태: [개발 현황](../../docs/development-status.ko.md) · [현재 실행 안내](../README.md) · [현재 서비스 API](../../docs/service-api.ko.md)
+> 현재 상태: [개발 현황](development-status.ko.md) · [현재 실행 안내](../README.md) · [현재 서비스 API](service-api.ko.md)
 
 Status: 설계 (2026-08-12)
 Parent: `docs/021-service-platform-architecture.md`

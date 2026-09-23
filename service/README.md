@@ -29,9 +29,9 @@ queue behavior, errors and deployment boundaries, and [development status](../do
 for implemented features and validation scope.
 
 Upgrade all gateways to the same admission implementation so both POST routes share
-the tenant row lock. No new database migration is required for the September 22 admission fix.
+the tenant row lock. The September 22 admission change needed no migration; the current September 23 version requires migration 003.
 A stored job whose queue delivery fails returns 503; retry with the same signal ID or
-`options.dedupKey` as documented. SOC policy-document RAG is not connected.
+`options.dedupKey` as documented. The durable outbox also retries pending execution deliveries. SOC policy-document RAG is not connected.
 
 The September 23 workflow update requires gateway migration `003-workflow-deliveries.sql`.
 Stop old gateways/workers, run `pnpm db:migrate`, then start the updated processes.

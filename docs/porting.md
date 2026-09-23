@@ -1,6 +1,6 @@
 # SOC 분리 기록
 
-> **포팅 당시 기록.** 아래 288개 테스트와 heuristic 완료는 당시 코드 기준이다. 현재 v2는 모델 주도 도구 루프이며 앱의 직접 connector를 지원한다. [현재 개발 현황](../../docs/development-status.ko.md) · [현재 실행 안내](../README.md)
+> **포팅 당시 기록.** 아래 288개 테스트와 heuristic 완료는 당시 코드 기준이다. 현재 v2는 모델 주도 도구 루프이며 앱의 직접 connector를 지원한다. [현재 개발 현황](development-status.ko.md) · [현재 실행 안내](../README.md)
 
 출처: `secops-nunchi-agent`, HEAD `04f935c0d1301440120bddc8e5647285617fa901`와
 포팅 시점 작업 트리. SOC 도메인·v1 미션·v2 모니터·게이트웨이·worker·평가를 독립 프로젝트로 추출했다.

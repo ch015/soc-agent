@@ -1,6 +1,6 @@
 # SOC 정책·지침 목록과 문서 추가 요청
 
-기준: 2026-09-22. [문서 목록](README.md) · [현재 개발 현황](development-status.ko.md)
+기준: 2026-09-23. [문서 목록](README.md) · [현재 개발 현황](development-status.ko.md)
 
 ## 현재 참조하는 지침
 

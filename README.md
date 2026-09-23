@@ -1,6 +1,6 @@
 # secops-soc-agent
 
-문서 기준: 2026-09-22. [현재 개발 현황](docs/development-status.ko.md) · [문서 목록](docs/README.md)
+문서 기준: 2026-09-23. [현재 개발 현황](docs/development-status.ko.md) · [문서 목록](docs/README.md)
 
 기존 앱에서 직접 호출하는 공개 API: [`createSocAgent`](src/index.ts). `pnpm build:library` 후 모듈 import로 사용할 수 있습니다. [코드 연동 가이드](docs/embedding.md)
 
@@ -40,7 +40,7 @@ pnpm worker
 
 `tenant:create`가 출력한 tenant ID와 API 키를 시그널 발신기에 설정한다.
 게이트웨이는 기본 `http://localhost:3001`에서 실행된다. `.env`는 start/worker/DB/mission
-명령에서 자동으로 읽는다. 마이그레이션은 새 SOC 전용 DB에 적용하며 재실행할 수 있다.
+명령에서 자동으로 읽는다. 마이그레이션은 SOC 전용 DB에 적용하며 재실행할 수 있다. 현재 버전은 `003-workflow-deliveries.sql`까지 필요하다. 기존 배포는 구버전 Gateway/worker를 중지한 뒤 migration과 새 프로세스 시작을 진행한다.
 
 v2 운영에는 `.env`의 `SIEM_BE_BASE_URL`, `SIEM_BE_SERVICE_TOKEN`,
 `ANTHROPIC_API_KEY`, `SLACK_BOT_TOKEN`, Slack 채널을 설정한다.
@@ -117,7 +117,7 @@ HTTP `POST /api/v1/jobs`에서 `domain: "soc"`, `source: {"type":"snapshot"}`,
 
 큐 이름은 **`secops-soc`**이다. signal 중복·상관과 일반 `options.dedupKey`의 판정은
 PostgreSQL에 저장된 작업을 기준으로 한다. 두 수신 경로의 중복 확인·할당량·생성을
-테넌트 행 잠금으로 묶으며, DB 저장 후 큐 실패는 503과 jobId를 반환한다.
+테넌트 행 잠금으로 묶고 실행 요청도 같은 DB 트랜잭션에 저장한다. 즉시 큐 전달 실패는 503과 jobId를 반환하며 outbox dispatcher도 미전달 요청을 재시도한다.
 [중복 창·동일 요청 재시도·배포 조건](docs/service-api.ko.md)을 확인한다.
 기존 큐·DB의 진행 중 job은 자동 이전하지 않는다. 생산자 URL과 tenant 키를 새 서비스로
 전환하고 기존 job을 drain한 뒤 이전 워커를 중단한다.

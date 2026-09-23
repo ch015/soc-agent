@@ -1,6 +1,6 @@
 # SOC 서비스 API와 중복·장애 처리
 
-기준: 2026-09-22. [설치·Docker·tenant 준비](../README.md) · [서비스 빌드](../service/README.md)
+기준: 2026-09-23. [설치·Docker·tenant 준비](../README.md) · [서비스 빌드](../service/README.md)
 
 기본 포트는 3001, 큐는 `secops-soc`이다. Bearer tenant API 키를 사용하고 조회·조치 시 소유권을 확인한다.
 코드 factory를 직접 호출하는 앱은 이 HTTP 서버·DB·큐가 필요하지 않다.
@@ -52,18 +52,26 @@ job `completed`와 조사 성공은 다르다. `result.investigationStatus`·`ph
 - DB 커밋 뒤 Redis 전달이 실패하거나 5초를 넘으면 503과 저장된 `jobId`를 반환한다.
   signal 또는 dedupKey가 있으면 `retryable: true`, `Retry-After: 5`이며 같은 식별자·본문으로 재시도한다.
 - dedupKey 없는 일반 요청은 `retryable: false`다. 재제출 전에 반환된 jobId로 상태를 확인한다.
-  자동 outbox 재전송은 없고 DB와 Redis는 하나의 트랜잭션이 아니다.
+  실행 요청은 job 생성과 같은 DB 트랜잭션의 outbox에 저장된다. DB와 Redis는 별개지만 Gateway/worker dispatcher가 미전달 요청을 재시도한다.
 
 구현은 [admission](../src/gateway/job/admission.ts), 회귀는
 [DB 통합](../src/gateway/__tests__/admission.integration.test.ts)과
 [전달 장애](../src/gateway/__tests__/admission-delivery.test.ts)를 참조한다.
 Redis 캐시 유실·gateway 재시작에도 DB로 중복을 판정한다. 전체 gateway를 새 코드로 전환해야 한다.
-이 변경에는 새 DB migration이 필요하지 않다.
+현재 버전에는 `003-workflow-deliveries.sql` migration이 필요하다. 기존 Gateway/worker를 중지하고 `pnpm db:migrate` 후 새 버전을 함께 시작한다.
 
 ## 배포·문서 연결
 
 서비스 의존성은 `service/package.json`에 있다. 저장소 루트에서 `pnpm build:service` 후
-`service/`에서 production 설치·start/worker를 실행한다. `.env`도 해당 실행 디렉터리에 둔다.
+`service/`에서 production 설치·`pnpm db:migrate` 후 start/worker를 실행한다. `.env`도 해당 실행 디렉터리에 둔다.
 Compose에는 SOC worker가 포함된다. 외부 SIEM/모델/Slack의 설정과 성공 확인은 별도다.
 정책 문서 업로드·검색 API나 `SOC_KNOWLEDGE_CONFIG` 환경변수는 현재 제공하지 않는다.
 향후 연결 요청은 [정책 문서 안내](policy-documents.ko.md)를 사용한다.
+
+## 실행 소유권과 결과 전달
+
+waiting 입력과 수동 승인은 입력·새 delivery ID·실행 요청을 DB에 함께 저장한다. 승인 재개는 최초 큐 작업과 다른 ID를 사용한다. 상태/version 비교와 실행 token 검증으로 취소되거나 다른 worker가 인계한 작업의 늦은 상태 변경을 거부한다.
+
+worker 기본 deadline은 10분이며 조사 루프의 기본 120초 제한과 별개다. 약 1초 주기로 취소를 확인해 하위 실행에 전달한다. 반복 worker 종료로 BullMQ가 stalled 복구를 포기하면 DB의 running/action_executing도 failed로 정리한다.
+
+일반 결과 콜백은 완료/실패/대기 상태와 함께 저장하고 독립 재전송한다. HTTP 실패·전달 설정 누락은 성공 처리하지 않는다. 웹훅에는 고정 Idempotency-Key를 보내며 ACK 유실에 따른 중복 수신은 수신 측에서 처리한다. Monitor의 별도 escalation Slack 전송은 이 outbox와 다르고 여전히 best-effort다. 운영 쿼리·기존 작업의 한계는 [워크플로우 복구](workflow-recovery.ko.md)를 따른다.

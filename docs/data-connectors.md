@@ -1,6 +1,6 @@
 # SOC 데이터 커넥터 — 현재 모듈
 
-문서 기준: 2026-09-18. [코드 연동](embedding.md) · [행동 지침](agent-autonomy.md)
+문서 기준: 2026-09-23. [코드 연동](embedding.md) · [행동 지침](agent-autonomy.md)
 
 코어 구현은 `src/runtime/investigation/`에 있다. gateway의 기존 adapter 경로는 호환 re-export다. 아래 HTTP 규약 외에도 `dataSource.createConnector(signal)`로 앱의 기존 조회 함수를 직접 전달할 수 있다.
 

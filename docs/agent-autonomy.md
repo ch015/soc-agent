@@ -1,6 +1,6 @@
 # SOC 자율 조사 지침
 
-현재 구현 기준: 2026-09-22. 앱 연결과 취소 사용법은 [코드 연동](embedding.md)을 참조한다.
+현재 구현 기준: 2026-09-23. 앱 연결과 취소 사용법은 [코드 연동](embedding.md)을 참조한다.
 
 v2 monitor는 모델이 도구와 종료 시점을 선택하는 `tool_use → tool_result → 다음 판단` 루프다. 고정된 API 수집 묶음, 별도 triage/analyze 호출, 심각도·이벤트 개수에 따른 heuristic 종결을 제거했다. v1 prepared snapshot 경로에는 같은 행동 지침을 추가했고 기존 독립 검토 순서를 유지한다.
 
@@ -42,3 +42,7 @@ v2 monitor는 모델이 도구와 종료 시점을 선택하는 `tool_use → to
 이 지침과 런타임 판정 검증이 현재 SOC의 내부 정책이다. 외부 표준 원문·조직 정책을 검색하는
 RAG는 연결되어 있지 않다. MITRE 출력 필드는 공식 taxonomy 검색·검증을 제공하지 않는다.
 [정책 목록과 문서 추가 요청](policy-documents.ko.md)에 실행 지침·참고 자료·향후 구현을 구분했다.
+
+## 서비스 실행 경계
+
+위 기본 120초는 조사 루프 제한이다. Gateway worker에는 별도의 기본 10분 deadline과 실행 token 검증이 있고, 취소를 약 1초 주기로 확인해 SDK/조사 신호에 연결한다. 반복 stalled로 큐가 실패하면 남은 실행 상태도 failed로 정리한다. 일반 callback은 DB outbox로 재전송하며, 별도 escalation Slack은 기존 best-effort 결과를 유지한다. [migration·복구·전달 한계](workflow-recovery.ko.md)를 참조한다.
